@@ -1,0 +1,15 @@
+{
+  "name": "snorecenter",
+  "version": "1.0.0",
+  "description": "Overnight room audio turned into a morning sports highlight show on a Fly.io Sprite with zero-key Sprites Connectors.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "generate-samples": "node scripts/generate-samples.mjs",
+    "start": "node src/server.mjs",
+    "test": "node --test test/*.test.mjs"
+  }
+}
