@@ -74,7 +74,8 @@ export async function processAudioTape(db, wavBuffer, options = {}) {
     const priorMatch = await queryRecurringSound(
       ev.vector,
       localSignatures,
-      discovery.connectors.pinecone
+      discovery.connectors.pinecone,
+      ev
     );
 
     const jev = await classifyEventWithJev(ev, priorMatch, discovery.connectors.typesafe);

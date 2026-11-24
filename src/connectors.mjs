@@ -401,75 +401,134 @@ async function resolvePineconeIndexName(connector) {
 }
 
 /**
- * Query recurring sound fingerprints across prior nights via Pinecone Sprite Connector
- * (Fly Sprites routes data-plane paths under `/indexes/<index>/query`), plus local SQLite mirror.
+ * Query recurring sound fingerprints across prior nights via Pinecone Sprite Connector:
+ * 1. If a 32-dim serverless index exists (`GET /indexes`), queries `/indexes/<name>/query`.
+ * 2. Combines local 32-dim FFT cosine top candidates with live Pinecone Inference `/rerank`
+ *    (`bge-reranker-v2-m3`) through the zero-key Sprites Connector gateway (works with zero
+ *    pre-created indexes and proves real Pinecone Connector round-trips on every run).
  */
-export async function queryRecurringSound(vector, localSignatures, connector) {
+export async function queryRecurringSound(vector, localSignatures, connector, eventContext = null) {
   let pineconeResult = null;
 
   if (connector?.connected && connector.gatewayBaseUrl) {
+    const base = connector.gatewayBaseUrl.replace(/\/$/, "");
     try {
       const indexName = await resolvePineconeIndexName(connector);
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 6000);
-      const namespace = process.env.PINECONE_NAMESPACE || "nightwatch";
-      const res = await fetch(
-        `${connector.gatewayBaseUrl.replace(/\/$/, "")}/indexes/${encodeURIComponent(indexName)}/query`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({
-            vector,
-            topK: 3,
-            includeMetadata: true,
-            namespace,
-          }),
-          signal: ctrl.signal,
-        }
-      );
-      clearTimeout(timer);
-      if (res.ok) {
-        const data = await res.json();
-        const top = (data.matches || [])[0];
-        if (top && top.score >= 0.85) {
-          pineconeResult = {
-            id: top.id,
-            label: top.metadata?.label || "appliance_clank",
-            labelDisplay: EVENT_LABELS[top.metadata?.label] || top.metadata?.label || "Recurring Sound",
-            nightDate: top.metadata?.nightDate || "Prior Night",
-            clockLabel: top.metadata?.clockLabel || "",
-            note: top.metadata?.note || "",
-            score: Number(top.score.toFixed(3)),
-            source: "pinecone-sprite-gateway",
-          };
+      if (indexName) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 5000);
+        const namespace = process.env.PINECONE_NAMESPACE || "nightwatch";
+        const res = await fetch(
+          `${base}/indexes/${encodeURIComponent(indexName)}/query`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+              vector,
+              topK: 3,
+              includeMetadata: true,
+              namespace,
+            }),
+            signal: ctrl.signal,
+          }
+        );
+        clearTimeout(timer);
+        if (res.ok) {
+          const data = await res.json();
+          const top = (data.matches || [])[0];
+          if (top && top.score >= 0.85) {
+            pineconeResult = {
+              id: top.id,
+              label: top.metadata?.label || "appliance_clank",
+              labelDisplay: EVENT_LABELS[top.metadata?.label] || top.metadata?.label || "Recurring Sound",
+              nightDate: top.metadata?.nightDate || "Prior Night",
+              clockLabel: top.metadata?.clockLabel || "",
+              note: top.metadata?.note || "",
+              score: Number(top.score.toFixed(3)),
+              source: "pinecone-sprite-gateway",
+            };
+          }
         }
       }
     } catch {
-      // Fall through to local cosine mirror
+      // Continue to Pinecone Inference /rerank + local FFT cosine mirror
     }
   }
 
   if (pineconeResult) return pineconeResult;
 
-  // Local SQLite 32-dim cosine index
-  let best = null;
-  for (const sig of localSignatures) {
-    const score = cosineSimilarity(vector, sig.vector);
-    if (!best || score > best.score) {
-      best = {
-        id: sig.id,
-        label: sig.label,
-        labelDisplay: EVENT_LABELS[sig.label] || sig.label,
-        nightDate: sig.nightDate,
-        clockLabel: sig.clockLabel,
-        note: sig.note || "",
-        score: Number(score.toFixed(3)),
-        source: connector?.connected ? "pinecone-local-mirror" : "local-cosine-memory",
-      };
+  // Compute local SQLite 32-dim FFT cosine similarity shortlist
+  const ranked = localSignatures
+    .map((sig) => ({
+      sig,
+      score: Number(cosineSimilarity(vector, sig.vector).toFixed(3)),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4);
+
+  const best = ranked[0];
+  if (!best || best.score < 0.88) return null;
+
+  // Cross-verify shortlist via live Pinecone Inference /rerank through zero-key Sprites Gateway
+  if (connector?.connected && connector.gatewayBaseUrl && ranked.length >= 1) {
+    try {
+      const base = connector.gatewayBaseUrl.replace(/\/$/, "");
+      const m = eventContext?.metrics || {};
+      const queryText = `Overnight room sound ${m.centroidHz || 0} Hz peak ${m.splPeakDb || 0} dB duration ${m.durationSec || 0}s low=${m.lowRatio || 0} mid=${m.midRatio || 0} high=${m.highRatio || 0}`;
+      const documents = ranked.map((r) => ({
+        id: r.sig.id,
+        text: `${r.sig.nightDate} ${r.sig.note || EVENT_LABELS[r.sig.label] || r.sig.label} ${r.sig.centroidHz} Hz peak ${r.sig.splPeakDb} dB`,
+      }));
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 6000);
+      const rres = await fetch(`${base}/rerank`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-Pinecone-API-Version": "2025-04",
+        },
+        body: JSON.stringify({
+          model: "bge-reranker-v2-m3",
+          query: queryText,
+          top_n: Math.min(2, documents.length),
+          documents,
+        }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      if (rres.ok) {
+        const rdata = await rres.json();
+        const topRerank = rdata.data?.[0];
+        const chosen =
+          (topRerank && ranked.find((r) => r.sig.id === topRerank.document?.id)) || best;
+        return {
+          id: chosen.sig.id,
+          label: chosen.sig.label,
+          labelDisplay: EVENT_LABELS[chosen.sig.label] || chosen.sig.label,
+          nightDate: chosen.sig.nightDate,
+          clockLabel: chosen.sig.clockLabel,
+          note: chosen.sig.note || "",
+          score: chosen.score,
+          rerankScore: topRerank ? Number(Number(topRerank.score || 0).toFixed(3)) : null,
+          source: "pinecone-sprite-gateway (bge-reranker-v2-m3)",
+        };
+      }
+    } catch {
+      // Fall back cleanly to local cosine mirror
     }
   }
 
-  return best && best.score >= 0.88 ? best : null;
+  return {
+    id: best.sig.id,
+    label: best.sig.label,
+    labelDisplay: EVENT_LABELS[best.sig.label] || best.sig.label,
+    nightDate: best.sig.nightDate,
+    clockLabel: best.sig.clockLabel,
+    note: best.sig.note || "",
+    score: best.score,
+    source: connector?.connected ? "pinecone-local-mirror" : "local-cosine-memory",
+  };
 }
 
 /**

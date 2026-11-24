@@ -24,7 +24,7 @@ A personal overnight audio agent is idle for 23 hours and 55 minutes a day, yet 
 | Connector | Role in SnoreCenter | Gateway Route |
 | --- | --- | --- |
 | **TypeSafe AI (Jev)** | Calibrated `choice` event classification, `score` drama rating, and `noul` highlight gate. Any event under `70%` confidence pauses for human booth review (`You call it`). | `POST /v1/decide` |
-| **Pinecone** | Stores and queries 32-dim unit-normalized FFT acoustic signatures across nights so recurring culprits (like Tuesday's 142 Hz hallway radiator) surface with cosine scores. | `POST /query`, `POST /vectors/upsert` |
+| **Pinecone** | Matches recurring overnight culprits across nights combining 32-dim FFT cosine similarity with live Pinecone Inference (`/rerank` `bge-reranker-v2-m3` + `/indexes/<name>/query`). | `POST /rerank`, `POST /indexes/<name>/query` |
 | **Ollama Cloud** | Synthesizes grounded two-anchor morning play-by-play (Rex Vance & Margo Hale) strictly citing real DSP timestamps, dB peaks, dominant frequencies, and vector matches. | `POST /v1/chat/completions` |
 | **Box** | Archives standalone print-clean Breakfast Box Score HTML cards to `/Highlights` (and supports overnight tape drops in `/NightWatch`). | `GET /2.0/folders/0/items`, `POST /2.0/files/content` |
 | **ElevenLabs** | Voices the dual-anchor morning highlight reel (Rex Vance & Margo Hale) when attached to the Sprite. | `POST /v1/text-to-speech/{voice_id}` |
