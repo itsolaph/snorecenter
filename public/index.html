@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SnoreCenter: Morning Sports Highlight Desk for Overnight Room Audio</title>
+  <meta name="description" content="Turn overnight room audio into a morning sports highlight show on a Fly.io Sprite with zero-key TypeSafe AI, Pinecone, Ollama, Box, and ElevenLabs Connectors.">
+  <link rel="preload" href="/fonts/barlow-condensed-800.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/barlow-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#broadcast-desk">Skip to morning broadcast</a>
+
+  <header class="topbar">
+    <div class="shell topbar__inner">
+      <a class="wordmark" href="/">SnoreCenter</a>
+      <nav class="topnav" aria-label="Primary sections">
+        <a href="#broadcast-desk">Morning desk</a>
+        <a href="#box-score">Box score</a>
+        <a href="#film-ledger">Event film</a>
+        <a href="#nightly-ledger">Nightly ledger</a>
+        <a href="/connected">Connector proof</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <section class="hero" aria-labelledby="hero-heading">
+      <div class="shell hero__grid">
+        <div class="hero__copy">
+          <h1 id="hero-heading">Your night, called like a morning highlight show.</h1>
+          <p class="hero__lede">SnoreCenter slices overnight room audio on a single Fly.io Sprite, flags recurring mystery noises, and puts two dead-serious sports anchors on the tape.</p>
+          <div class="hero__actions">
+            <button type="button" id="btn-play-hero" class="btn btn--primary">Play last night</button>
+            <button type="button" id="btn-record-hero" class="btn btn--secondary">Record 8s live</button>
+          </div>
+          <div class="hero__upload">
+            <label for="audio-file-input" class="file-trigger">Upload a WAV or room recording</label>
+            <input id="audio-file-input" type="file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.webm" class="sr-only">
+            <span id="upload-status" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+        <div class="hero__visual">
+          <img
+            src="/assets/hero-desk.jpg"
+            alt="Brushed silver broadcast desk microphone beside a white coffee mug and printed cobalt audio waveform sheet in bright morning light"
+            width="1376"
+            height="768"
+            fetchpriority="high"
+            class="hero__photo">
+        </div>
+      </div>
+    </section>
+
+    <section id="broadcast-desk" class="band--field" aria-labelledby="broadcast-headline">
+      <div class="shell">
+        <div class="stage-head">
+          <h2 id="broadcast-headline">Loading last night's tape...</h2>
+          <p id="broadcast-subhead" class="stage-subhead">Waiting for the Fly.io Sprite morning desk to deliver the overnight spectrogram and booth script.</p>
+        </div>
+
+        <div class="replay-deck">
+          <div class="spectrogram-frame">
+            <canvas
+              id="spectrogram-canvas"
+              class="spectrogram-canvas"
+              width="1200"
+              height="240"
+              role="img"
+              aria-label="Interactive spectrogram of overnight room audio showing detected acoustic peaks and playback cursor"></canvas>
+          </div>
+
+          <audio id="tape-audio" preload="metadata"></audio>
+
+          <div class="deck-controls">
+            <div class="deck-controls__left">
+              <button type="button" id="btn-play-toggle" class="btn btn--on-field btn--compact">Play tape</button>
+              <button type="button" id="btn-slowmo" class="btn btn--field-outline btn--compact" aria-pressed="false">Slow-mo 0.65x</button>
+              <button type="button" id="btn-rerun-sample" class="btn btn--field-outline btn--compact">Run fresh cut</button>
+            </div>
+            <div id="deck-clock" class="deck-clock">00:00.0 / 00:00.0</div>
+          </div>
+
+          <div class="mic-status-bar">
+            <p id="mic-status" class="mic-status-text" role="status" aria-live="polite">Ready. Click any peak on the spectrogram to jump straight to that moment, or record 8 seconds from your microphone.</p>
+            <canvas
+              id="mic-meter"
+              class="mic-meter"
+              width="220"
+              height="32"
+              role="img"
+              aria-label="Live microphone input level meter"></canvas>
+          </div>
+        </div>
+
+        <div id="booth-grid" class="booth-grid" aria-label="Morning booth commentary"></div>
+      </div>
+    </section>
+
+    <section id="box-score" class="section-snow" aria-labelledby="box-score-heading">
+      <div class="shell">
+        <div class="section-head">
+          <h2 id="box-score-heading">Breakfast box score</h2>
+          <p id="box-score-date" class="section-lead">Measured directly from room PCM peaks and inter-event silence.</p>
+        </div>
+
+        <div class="stat-strip">
+          <div class="stat-cell">
+            <div id="stat-peak-db" class="fig">--</div>
+            <div class="stat-label">Peak room loudness</div>
+            <div id="stat-peak-clock" class="stat-sub">Waiting for tape</div>
+          </div>
+          <div class="stat-cell">
+            <div id="stat-rally" class="fig">--</div>
+            <div class="stat-label">Longest single rally</div>
+            <div id="stat-rally-clock" class="stat-sub">Waiting for tape</div>
+          </div>
+          <div class="stat-cell">
+            <div id="stat-pause" class="fig">--</div>
+            <div class="stat-label">Longest Dramatic Pause</div>
+            <div class="stat-sub">Widest quiet stretch between plays</div>
+          </div>
+          <div class="stat-cell">
+            <div id="stat-events" class="fig">--</div>
+            <div class="stat-label">Events logged</div>
+            <div id="stat-ambient" class="stat-sub">Room floor calibration</div>
+          </div>
+        </div>
+
+        <p class="non-medical-note">Entertainment scoreboard computed from room audio only. Longest Dramatic Pause measures ordinary silence between detected room noises and is not a medical device or sleep apnea assessment.</p>
+      </div>
+    </section>
+
+    <section id="film-ledger" class="section-paper2" aria-labelledby="film-heading">
+      <div class="shell">
+        <div class="section-head">
+          <h2 id="film-heading">Event film ledger</h2>
+          <p class="section-lead">Events below 70% Jev confidence pause for your booth ruling and save their 32-dim FFT signature for tomorrow night.</p>
+        </div>
+
+        <div tabindex="0" role="region" aria-labelledby="film-table-caption" class="table-wrapper">
+          <table class="film-table">
+            <caption id="film-table-caption" class="sr-only">Detected overnight acoustic events with peak decibels, Jev confidence, Pinecone memory match, and replay actions</caption>
+            <thead>
+              <tr>
+                <th scope="col">Clock</th>
+                <th scope="col">Call</th>
+                <th scope="col">Peak</th>
+                <th scope="col">Tone</th>
+                <th scope="col">Jev confidence</th>
+                <th scope="col">Vector memory</th>
+                <th scope="col">Film action</th>
+              </tr>
+            </thead>
+            <tbody id="film-tbody">
+              <tr>
+                <th scope="row">--</th>
+                <td colspan="6">Loading overnight film ledger...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="nightly-ledger" class="section-snow" aria-labelledby="ledger-heading">
+      <div class="shell">
+        <div class="section-head">
+          <h2 id="ledger-heading">Nightly ledger and Sprite proof</h2>
+          <p id="season-summary" class="section-lead">Persistent SQLite history, Box archival, and read-only Sprite checkpoints.</p>
+        </div>
+
+        <div class="ledger-grid">
+          <div class="ledger-col">
+            <h3>Recorded nights</h3>
+            <ul id="sessions-list" class="ruled-list"></ul>
+
+            <div class="ledger-actions">
+              <button type="button" id="btn-archive-box" class="btn btn--secondary btn--compact">Archive to Box</button>
+              <button type="button" id="btn-checkpoint" class="btn btn--secondary btn--compact">Save checkpoint</button>
+              <a id="link-card" href="#" target="_blank" rel="noopener">Open standalone card</a>
+            </div>
+            <p id="archive-feedback" class="action-feedback" role="status" aria-live="polite"></p>
+
+            <h3>Sprite checkpoints</h3>
+            <ul id="checkpoints-list" class="ruled-list"></ul>
+          </div>
+
+          <div class="ledger-col">
+            <h3>Zero-key Sprites Connectors</h3>
+            <div class="key-proof-row">
+              <div>
+                <div class="stat-label">Raw API keys inside Sprite env</div>
+                <div id="runtime-mode-note" class="stat-sub">Checked live via /connected</div>
+              </div>
+              <div id="raw-key-count" class="key-proof-num">0</div>
+            </div>
+            <ul id="connectors-list" class="ruled-list"></ul>
+            <p class="caption">Inspect live gateway discovery JSON at <a href="/connected?format=json">/connected?format=json</a>.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell footer__inner">
+      <p class="caption">SnoreCenter runs on a single wake-on-HTTP Fly.io Sprite with zero stored API keys.</p>
+      <div class="footer__links">
+        <a href="/connected">Connector proof</a>
+        <a href="/healthz">Health JSON</a>
+        <a id="footer-card-link" href="#">Breakfast card</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Native modal dialog following Modern Web Guidance (no role="dialog" or aria-modal) -->
+  <dialog id="recall-dialog" closedby="any" aria-labelledby="recall-title">
+    <div class="dialog-head">
+      <h2 id="recall-title">Booth review: make the call</h2>
+      <button type="button" id="btn-dialog-close" class="btn btn--secondary btn--compact">Close</button>
+    </div>
+
+    <p id="recall-meta" class="caption"></p>
+
+    <ul id="recall-probs" class="prob-list" aria-label="TypeSafe Jev probability breakdown"></ul>
+
+    <form id="recall-form" method="dialog" class="dialog-form">
+      <div class="field-group">
+        <label for="recall-label-select" class="field-label">What actually made this sound?</label>
+        <select id="recall-label-select" name="label" class="field-control">
+          <option value="snore_crescendo">Snore Crescendo</option>
+          <option value="pet_ambush">Pet Ambush</option>
+          <option value="appliance_clank">Radiator / Pipe Clank</option>
+          <option value="fridge_raid">Fridge Raid</option>
+          <option value="mystery_mumble">Mystery Mumble</option>
+        </select>
+      </div>
+
+      <div class="field-group">
+        <label for="recall-note-input" class="field-label">Short memory label for future nights (optional)</label>
+        <input
+          id="recall-note-input"
+          name="note"
+          type="text"
+          maxlength="60"
+          placeholder="Example: Hallway Radiator or Porch Terrier"
+          class="field-control">
+      </div>
+
+      <div class="dialog-actions">
+        <button type="submit" value="cancel" autofocus class="btn btn--secondary btn--compact">Cancel</button>
+        <button type="submit" value="save" class="btn btn--primary btn--compact">Save booth call</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
