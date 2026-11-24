@@ -132,7 +132,8 @@ export async function processAudioTape(db, wavBuffer, options = {}) {
         commentary.lines,
         audioDir,
         sessionId,
-        discovery.connectors.elevenlabs
+        discovery.connectors.elevenlabs,
+        discovery.connectors.openrouter
       );
 
   const fullSession = {

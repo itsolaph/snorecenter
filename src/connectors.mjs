@@ -585,11 +585,12 @@ export async function generateCommentaryWithOllama(session, events, connector, o
 
     const prompt = [
       "You are the morning breakfast highlight desk for SnoreCenter.",
-      "Write dead-serious, witty sports broadcast commentary between Rex Vance (Play-by-play) and Margo Hale (Acoustic analyst).",
+      "Write deadpan, dry-witted ESPN SportsCenter commentary between Rex Vance (Play-by-play) and Margo Hale (Acoustic analyst).",
+      "STYLE: Treat ordinary bedroom noises like Game 7 film study. Zero exclamation-mark hype, zero buzzwords like 'electrifying' or 'game-changer'. Crisp, understated broadcast voice.",
       "RULES:",
       "1. Cite ONLY exact clocks, dB values, Hz values, durations, and recurring matches from the JSON facts.",
       "2. Strictly entertainment: NEVER mention sleep apnea, medical diagnoses, or health advice. Use 'Longest Dramatic Pause' for silence gaps.",
-      "3. Return strict JSON: { \"headline\": string (<=10 words, crisp), \"subhead\": string (1 sentence), \"lines\": [ { \"speaker\": \"Rex Vance\"|\"Margo Hale\", \"role\": string, \"clock\": string, \"startSec\": number, \"text\": string (1-2 sharp sentences) } ] } with 3 to 4 lines.",
+      "3. Return strict JSON: { \"headline\": string (<=9 words, punchy sports desk title citing peak dB), \"subhead\": string (1 crisp sentence), \"lines\": [ { \"speaker\": \"Rex Vance\"|\"Margo Hale\", \"role\": string, \"clock\": string, \"startSec\": number, \"text\": string (1-2 dry, punchy sentences) } ] } with 3 to 4 lines alternating speakers.",
       `FACTS:\n${JSON.stringify(facts)}`,
     ].join("\n");
 
@@ -647,65 +648,151 @@ export async function generateCommentaryWithOllama(session, events, connector, o
 
 /**
  * Synthesize dual-anchor voiced broadcast commentary (Rex Vance + Margo Hale)
- * via ElevenLabs Sprite Connector. Concatenates per-line MP3 clips cleanly with zero
- * local API keys; degrades honestly to native room WAV replay when offline.
+ * via ElevenLabs Sprite Connector OR OpenRouter Sprite Connector (`elevenlabs/eleven-v4`),
+ * with zero raw API keys inside the Sprite.
  */
-export async function synthesizeHighlightAudio(lines, audioDir, sessionId, connector) {
-  if (!connector?.connected || !connector.gatewayBaseUrl) {
-    return {
-      filename: null,
-      source: "native-room-replay",
-      note: "Room WAV plays directly in browser; attach ElevenLabs Sprite Connector for voiced dual-anchor mix.",
-    };
+export async function synthesizeHighlightAudio(lines, audioDir, sessionId, connector, openrouterConnector = null) {
+  const usableLines = (lines || []).slice(0, 4);
+  if (usableLines.length === 0) {
+    return { filename: null, source: "native-room-replay" };
   }
 
-  const rexVoice = process.env.ELEVENLABS_REX_VOICE_ID || "pNInz6obpgDQGcFmaJgB";
-  const margoVoice = process.env.ELEVENLABS_MARGO_VOICE_ID || "EXAVITQu4vr4xnSDxMaL";
-  const modelId = process.env.ELEVENLABS_MODEL_ID || "eleven_turbo_v2_5";
-  const base = connector.gatewayBaseUrl.replace(/\/$/, "");
+  // Path 1: Direct ElevenLabs Sprite Connector
+  if (connector?.connected && connector.gatewayBaseUrl) {
+    const rexVoice = process.env.ELEVENLABS_REX_VOICE_ID || "pNInz6obpgDQGcFmaJgB";
+    const margoVoice = process.env.ELEVENLABS_MARGO_VOICE_ID || "EXAVITQu4vr4xnSDxMaL";
+    const modelId = process.env.ELEVENLABS_MODEL_ID || "eleven_turbo_v2_5";
+    const base = connector.gatewayBaseUrl.replace(/\/$/, "");
 
-  try {
-    const mp3Buffers = [];
-    for (const line of (lines || []).slice(0, 4)) {
-      const voiceId = line.speaker === "Margo Hale" ? margoVoice : rexVoice;
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 18000);
-      const res = await fetch(`${base}/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "audio/mpeg",
-        },
-        body: JSON.stringify({
-          text: String(line.text || "").slice(0, 360),
-          model_id: modelId,
-        }),
-        signal: ctrl.signal,
-      });
-      clearTimeout(timer);
-      if (!res.ok) {
-        return { filename: null, source: "native-room-replay", error: `HTTP ${res.status}` };
+    try {
+      const mp3Buffers = [];
+      for (const line of usableLines) {
+        const voiceId = line.speaker === "Margo Hale" ? margoVoice : rexVoice;
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 18000);
+        const res = await fetch(`${base}/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "audio/mpeg" },
+          body: JSON.stringify({ text: String(line.text || "").slice(0, 360), model_id: modelId }),
+          signal: ctrl.signal,
+        });
+        clearTimeout(timer);
+        if (!res.ok) {
+          return { filename: null, source: "native-room-replay", error: `HTTP ${res.status}` };
+        }
+        mp3Buffers.push(Buffer.from(await res.arrayBuffer()));
       }
-      mp3Buffers.push(Buffer.from(await res.arrayBuffer()));
+      const combined = Buffer.concat(mp3Buffers);
+      const filename = `${sessionId}-broadcast.mp3`;
+      await fsp.mkdir(audioDir, { recursive: true });
+      await fsp.writeFile(path.join(audioDir, filename), combined);
+      return {
+        filename,
+        source: "elevenlabs-sprite-gateway (dual-anchor)",
+        bytes: combined.length,
+        linesVoiced: mp3Buffers.length,
+      };
+    } catch (err) {
+      return { filename: null, source: "native-room-replay", error: err.message };
     }
-
-    if (mp3Buffers.length === 0) {
-      return { filename: null, source: "native-room-replay" };
-    }
-
-    const combined = Buffer.concat(mp3Buffers);
-    const filename = `${sessionId}-broadcast.mp3`;
-    await fsp.mkdir(audioDir, { recursive: true });
-    await fsp.writeFile(path.join(audioDir, filename), combined);
-    return {
-      filename,
-      source: "elevenlabs-sprite-gateway (dual-anchor)",
-      bytes: combined.length,
-      linesVoiced: mp3Buffers.length,
-    };
-  } catch (err) {
-    return { filename: null, source: "native-room-replay", error: err.message };
   }
+
+  // Path 2: OpenRouter Sprite Connector -> ElevenLabs v4 dual-anchor TTS (24kHz s16le PCM -> ffmpeg MP3)
+  if (openrouterConnector?.connected && openrouterConnector.gatewayBaseUrl) {
+    const base = openrouterConnector.gatewayBaseUrl.replace(/\/$/, "");
+    const model = process.env.OPENROUTER_TTS_MODEL || "elevenlabs/eleven-v4";
+    const pausePcm = Buffer.alloc(24000 * 2 * 0.28); // 280ms studio breath between anchors
+
+    try {
+      const pcmChunks = [];
+      for (let i = 0; i < usableLines.length; i++) {
+        const line = usableLines[i];
+        const voice = line.speaker === "Margo Hale" ? "jessica" : "chris";
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 22000);
+        const res = await fetch(`${base}/v1/audio/speech`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model,
+            voice,
+            input: String(line.text || "").slice(0, 320),
+          }),
+          signal: ctrl.signal,
+        });
+        clearTimeout(timer);
+        if (!res.ok) {
+          return { filename: null, source: "native-room-replay", error: `OpenRouter TTS HTTP ${res.status}` };
+        }
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (buf.length > 0) {
+          pcmChunks.push(buf);
+          if (i < usableLines.length - 1) pcmChunks.push(pausePcm);
+        }
+      }
+
+      if (pcmChunks.length === 0) {
+        return { filename: null, source: "native-room-replay" };
+      }
+
+      const mergedPcm = Buffer.concat(pcmChunks);
+      await fsp.mkdir(audioDir, { recursive: true });
+      const tmpPcm = path.join(audioDir, `${sessionId}-booth.pcm`);
+      const mp3Name = `${sessionId}-broadcast.mp3`;
+      const mp3Path = path.join(audioDir, mp3Name);
+      await fsp.writeFile(tmpPcm, mergedPcm);
+
+      try {
+        await execFileAsync(
+          "ffmpeg",
+          ["-y", "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", tmpPcm, "-codec:a", "libmp3lame", "-b:a", "128k", mp3Path],
+          { timeout: 25000 }
+        );
+        await fsp.rm(tmpPcm, { force: true }).catch(() => {});
+        const stat = await fsp.stat(mp3Path);
+        return {
+          filename: mp3Name,
+          source: `openrouter-sprite-gateway (${model}, chris+jessica)`,
+          bytes: stat.size,
+          linesVoiced: usableLines.length,
+        };
+      } catch {
+        // Fallback: wrap raw s16le 24kHz PCM in a standard WAV header if ffmpeg unavailable
+        await fsp.rm(tmpPcm, { force: true }).catch(() => {});
+        const wavName = `${sessionId}-broadcast.wav`;
+        const wavBuf = Buffer.alloc(44 + mergedPcm.length);
+        wavBuf.write("RIFF", 0, "ascii");
+        wavBuf.writeUInt32LE(36 + mergedPcm.length, 4);
+        wavBuf.write("WAVE", 8, "ascii");
+        wavBuf.write("fmt ", 12, "ascii");
+        wavBuf.writeUInt32LE(16, 16);
+        wavBuf.writeUInt16LE(1, 20);
+        wavBuf.writeUInt16LE(1, 22);
+        wavBuf.writeUInt32LE(24000, 24);
+        wavBuf.writeUInt32LE(48000, 28);
+        wavBuf.writeUInt16LE(2, 32);
+        wavBuf.writeUInt16LE(16, 34);
+        wavBuf.write("data", 36, "ascii");
+        wavBuf.writeUInt32LE(mergedPcm.length, 40);
+        mergedPcm.copy(wavBuf, 44);
+        await fsp.writeFile(path.join(audioDir, wavName), wavBuf);
+        return {
+          filename: wavName,
+          source: `openrouter-sprite-gateway (${model}, chris+jessica)`,
+          bytes: wavBuf.length,
+          linesVoiced: usableLines.length,
+        };
+      }
+    } catch (err) {
+      return { filename: null, source: "native-room-replay", error: err.message };
+    }
+  }
+
+  return {
+    filename: null,
+    source: "native-room-replay",
+    note: "Room WAV plays directly in browser; attach ElevenLabs or OpenRouter Sprite Connector for voiced dual-anchor mix.",
+  };
 }
 
 /**
