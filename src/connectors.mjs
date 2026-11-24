@@ -369,29 +369,64 @@ export async function classifyEventWithJev(event, priorMatch, connector) {
   return localAcousticClassify(event, priorMatch);
 }
 
+let cachedPineconeIndex = null;
+let cachedPineconeIndexAt = 0;
+
+async function resolvePineconeIndexName(connector) {
+  if (process.env.PINECONE_INDEX) return process.env.PINECONE_INDEX;
+  const now = Date.now();
+  if (cachedPineconeIndex && now - cachedPineconeIndexAt < 30000) return cachedPineconeIndex;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
+    const res = await fetch(`${connector.gatewayBaseUrl.replace(/\/$/, "")}/indexes`, {
+      headers: { Accept: "application/json" },
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = await res.json();
+      const list = data.indexes || [];
+      const exact = list.find((idx) => idx.name === "snorecenter-acoustic" || idx.dimension === 32);
+      if (exact?.name) {
+        cachedPineconeIndex = exact.name;
+        cachedPineconeIndexAt = now;
+        return exact.name;
+      }
+    }
+  } catch {
+    // Fall back to default name
+  }
+  return "snorecenter-acoustic";
+}
+
 /**
  * Query recurring sound fingerprints across prior nights via Pinecone Sprite Connector
- * (when configured) plus local SQLite 32-dim cosine mirror.
+ * (Fly Sprites routes data-plane paths under `/indexes/<index>/query`), plus local SQLite mirror.
  */
 export async function queryRecurringSound(vector, localSignatures, connector) {
   let pineconeResult = null;
 
   if (connector?.connected && connector.gatewayBaseUrl) {
     try {
+      const indexName = await resolvePineconeIndexName(connector);
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 5000);
+      const timer = setTimeout(() => ctrl.abort(), 6000);
       const namespace = process.env.PINECONE_NAMESPACE || "nightwatch";
-      const res = await fetch(`${connector.gatewayBaseUrl.replace(/\/$/, "")}/query`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          vector,
-          topK: 3,
-          includeMetadata: true,
-          namespace,
-        }),
-        signal: ctrl.signal,
-      });
+      const res = await fetch(
+        `${connector.gatewayBaseUrl.replace(/\/$/, "")}/indexes/${encodeURIComponent(indexName)}/query`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            vector,
+            topK: 3,
+            includeMetadata: true,
+            namespace,
+          }),
+          signal: ctrl.signal,
+        }
+      );
       clearTimeout(timer);
       if (res.ok) {
         const data = await res.json();
@@ -438,38 +473,43 @@ export async function queryRecurringSound(vector, localSignatures, connector) {
 }
 
 /**
- * Upsert a confirmed or human-labeled acoustic vector into Pinecone Sprite Connector.
+ * Upsert a confirmed or human-labeled acoustic vector into Pinecone Sprite Connector
+ * under `/indexes/<index>/vectors/upsert`.
  */
 export async function upsertSoundToPinecone(signature, connector) {
   if (!connector?.connected || !connector.gatewayBaseUrl) {
     return { synced: false, source: "local-sqlite-only" };
   }
   try {
+    const indexName = await resolvePineconeIndexName(connector);
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const timer = setTimeout(() => ctrl.abort(), 6000);
     const namespace = process.env.PINECONE_NAMESPACE || "nightwatch";
-    const res = await fetch(`${connector.gatewayBaseUrl.replace(/\/$/, "")}/vectors/upsert`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        namespace,
-        vectors: [
-          {
-            id: signature.id,
-            values: signature.vector,
-            metadata: {
-              label: signature.label,
-              nightDate: signature.nightDate,
-              clockLabel: signature.clockLabel,
-              note: signature.note || "",
-              centroidHz: signature.centroidHz,
-              splPeakDb: signature.splPeakDb,
+    const res = await fetch(
+      `${connector.gatewayBaseUrl.replace(/\/$/, "")}/indexes/${encodeURIComponent(indexName)}/vectors/upsert`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          namespace,
+          vectors: [
+            {
+              id: signature.id,
+              values: signature.vector,
+              metadata: {
+                label: signature.label,
+                nightDate: signature.nightDate,
+                clockLabel: signature.clockLabel,
+                note: signature.note || "",
+                centroidHz: signature.centroidHz,
+                splPeakDb: signature.splPeakDb,
+              },
             },
-          },
-        ],
-      }),
-      signal: ctrl.signal,
-    });
+          ],
+        }),
+        signal: ctrl.signal,
+      }
+    );
     clearTimeout(timer);
     if (res.ok) {
       return { synced: true, source: "pinecone-sprite-gateway" };

@@ -99,7 +99,7 @@ test("Sprites Connector gateway calls send zero Authorization headers and parse 
       return;
     }
 
-    if (req.url === "/query") {
+    if (req.url === "/indexes/snorecenter-acoustic/query") {
       receivedPineconeQuery = body;
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
