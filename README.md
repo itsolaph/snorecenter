@@ -7,7 +7,7 @@
 - **Live Fly.io Sprite:** https://snorecenter-b6vmo.sprites.app
 - **Live Zero-Key Connector Proof:** https://snorecenter-b6vmo.sprites.app/connected
 
-SnoreCenter is a personal overnight room-audio broadcast agent running on a single **Fly.io Sprite** with zero raw API keys inside the container. Drop in an overnight audio tape (or test your room live for 8 seconds from the browser), and SnoreCenter slices acoustic peaks with local DSP, classifies them through **TypeSafe AI (Jev)**, checks recurring culprits across prior nights in **Pinecone**, writes dead-serious two-anchor sports commentary through **Ollama Cloud** / **OpenRouter**, optionally voices the highlight reel via **ElevenLabs**, and archives a standalone **Breakfast Box Score** to **Box**.
+SnoreCenter is a personal overnight room-audio broadcast agent running live on a single **Fly.io Sprite** with zero raw API keys inside the container. Drop in an overnight audio tape (or test your room live for 8 seconds from the browser), and SnoreCenter slices acoustic peaks with local Radix-2 FFT + `ffmpeg`, checks recurring culprits across prior nights via the live **Pinecone** Connector (`/rerank` `bge-reranker-v2-m3` + 32-dim FFT cosine memory), generates dead-serious two-anchor sports commentary (`openai/gpt-4o-mini`) and voiced dual-anchor highlight audio (`elevenlabs/eleven-v4`, `chris` + `jessica` stitched via Sprite `ffmpeg 8.0.1`) through the live **OpenRouter** Connector, and produces a non-medical **Breakfast Box Score**. Optional gateway support for **TypeSafe AI (Jev)**, **Ollama Cloud**, **Box**, and direct **ElevenLabs** Connectors is also wired and auto-discovered at runtime when attached.
 
 > **Entertainment only:** SnoreCenter is built strictly for fun using ordinary room acoustics. Metrics such as *Longest Dramatic Pause* measure ordinary quiet stretches between detected room noises and are not a medical device or sleep-apnea assessment.
 
@@ -21,14 +21,14 @@ A personal overnight audio agent is idle for 23 hours and 55 minutes a day, yet 
 
 ## Sprites Connectors Used
 
-| Connector | Role in SnoreCenter | Gateway Route |
-| --- | --- | --- |
-| **TypeSafe AI (Jev)** | Calibrated `choice` event classification, `score` drama rating, and `noul` highlight gate. Any event under `70%` confidence pauses for human booth review (`You call it`). | `POST /v1/decide` |
-| **Pinecone** | Matches recurring overnight culprits across nights combining 32-dim FFT cosine similarity with live Pinecone Inference (`/rerank` `bge-reranker-v2-m3` + `/indexes/<name>/query`). | `POST /rerank`, `POST /indexes/<name>/query` |
-| **Ollama Cloud** | Synthesizes grounded two-anchor morning play-by-play (Rex Vance & Margo Hale) strictly citing real DSP timestamps, dB peaks, dominant frequencies, and vector matches. | `POST /v1/chat/completions` |
-| **Box** | Archives standalone print-clean Breakfast Box Score HTML cards to `/Highlights` (and supports overnight tape drops in `/NightWatch`). | `GET /2.0/folders/0/items`, `POST /2.0/files/content` |
-| **ElevenLabs** | Voices the dual-anchor morning highlight reel (Rex Vance & Margo Hale) when attached to the Sprite. | `POST /v1/text-to-speech/{voice_id}` |
-| **OpenRouter** | Zero-key LLM broadcast desk fallback scoped strictly to chat completions (`name_prefix: snorecenter`). | `POST /v1/chat/completions` |
+| Connector | Live Status on Public Sprite | Role in SnoreCenter | Gateway Route |
+| --- | --- | --- | --- |
+| **Pinecone** | **Live (`Sprite Gateway`)** | Matches recurring overnight culprits across nights combining 32-dim FFT cosine similarity with live Pinecone Inference (`/rerank` `bge-reranker-v2-m3`) plus `/indexes/<name>/query` & upsert when a 32-dim index exists. | `POST /rerank`, `POST /indexes/<name>/query` |
+| **OpenRouter** | **Live (`Sprite Gateway`)** | Scoped to `name_prefix: snorecenter`. Synthesizes grounded Rex Vance & Margo Hale broadcast scripts (`openai/gpt-4o-mini`) and live voiced dual-anchor MP3 commentary (`elevenlabs/eleven-v4`, `chris` + `jessica`) stitched with Sprite `ffmpeg 8.0.1`. | `POST /v1/chat/completions`, `POST /v1/audio/speech` |
+| **TypeSafe AI (Jev)** | Wired (local calibrated fallback active) | Calibrated `choice` event classification, `score` drama rating, and `noul` highlight gate. Events under `70%` confidence pause for human booth review (`You call it`). | `POST /v1/decide` |
+| **Ollama Cloud** | Wired (OpenRouter live on public Sprite) | Alternative zero-key LLM endpoint for two-anchor morning play-by-play script synthesis when attached. | `POST /v1/chat/completions` |
+| **Box** | Wired (local HTML export active) | Archives standalone print-clean Breakfast Box Score HTML cards to `/Highlights` (and supports overnight tape drops in `/NightWatch`). | `GET /2.0/folders/0/items`, `POST /2.0/files/content` |
+| **ElevenLabs (Direct)** | Wired (voiced via OpenRouter on public Sprite) | Direct ElevenLabs TTS gateway route when attached alongside or instead of OpenRouter. | `POST /v1/text-to-speech/{voice_id}` |
 
 Outside a Sprite (local development or CI), SnoreCenter transparently reports `local-baseline` on `/connected` and runs real local PCM DSP, calibrated acoustic classification, SQLite cosine memory, and standalone HTML export with zero faked connection badges.
 
