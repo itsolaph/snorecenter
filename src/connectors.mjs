@@ -38,6 +38,7 @@ const CONNECTOR_CATALOG = [
   { key: "ollama", name: "Ollama Cloud", role: "Two-anchor morning sports play-by-play script synthesis", matchers: ["ollama"] },
   { key: "box", name: "Box", role: "Inbox (/NightWatch) and Box Score archive (/Highlights)", matchers: ["box"] },
   { key: "elevenlabs", name: "ElevenLabs", role: "Voiced broadcast commentary mix for morning highlight clips", matchers: ["elevenlabs", "eleven"] },
+  { key: "openrouter", name: "OpenRouter", role: "Zero-key LLM broadcast desk fallback through Sprites Gateway", matchers: ["openrouter"] },
 ];
 
 const SECRET_ENV_PATTERN = /(TYPESAFE|PINECONE|BOX_|OLLAMA|ELEVENLABS|OPENAI|ANTHROPIC|API_KEY|API_TOKEN|ACCESS_TOKEN|SECRET_KEY)/i;
@@ -549,10 +550,18 @@ function buildDeterministicCommentary(session, events) {
 }
 
 /**
- * Generate 2-anchor morning highlight commentary via Ollama Cloud Sprite Connector.
+ * Generate 2-anchor morning highlight commentary via Ollama Cloud Sprite Connector
+ * (or OpenRouter Sprite Connector when Ollama is not attached yet), zero raw keys.
  */
-export async function generateCommentaryWithOllama(session, events, connector) {
-  if (connector?.connected && connector.gatewayBaseUrl) {
+export async function generateCommentaryWithOllama(session, events, connector, openrouterConnector = null) {
+  const activeConn =
+    connector?.connected && connector.gatewayBaseUrl
+      ? { ...connector, kind: "ollama" }
+      : openrouterConnector?.connected && openrouterConnector.gatewayBaseUrl
+        ? { ...openrouterConnector, kind: "openrouter" }
+        : null;
+
+  if (activeConn) {
     const facts = {
       nightDate: session.nightDate,
       ambientSplDb: session.ambientSplDb,
@@ -586,9 +595,12 @@ export async function generateCommentaryWithOllama(session, events, connector) {
 
     try {
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 14000);
-      const model = process.env.OLLAMA_MODEL || "llama3.3";
-      const res = await fetch(`${connector.gatewayBaseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
+      const timer = setTimeout(() => ctrl.abort(), 18000);
+      const model =
+        activeConn.kind === "ollama"
+          ? process.env.OLLAMA_MODEL || "llama3.3"
+          : process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
+      const res = await fetch(`${activeConn.gatewayBaseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
@@ -619,7 +631,7 @@ export async function generateCommentaryWithOllama(session, events, connector) {
                 startSec: Number.isFinite(Number(l.startSec)) ? Number(l.startSec) : 0,
                 text: String(l.text || "").slice(0, 320),
               })),
-              source: `ollama-sprite-gateway (${model})`,
+              source: `${activeConn.kind}-sprite-gateway (${model})`,
             };
           }
         }

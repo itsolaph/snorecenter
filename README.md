@@ -4,7 +4,10 @@
 
 **Your night, called like SportsCenter.**
 
-SnoreCenter is a personal overnight room-audio broadcast agent running on a single **Fly.io Sprite** with zero raw API keys inside the container. Drop in an overnight audio tape (or test your room live for 8 seconds from the browser), and SnoreCenter slices acoustic peaks with local DSP, classifies them through **TypeSafe AI (Jev)**, checks recurring culprits across prior nights in **Pinecone**, writes dead-serious two-anchor sports commentary with **Ollama Cloud**, optionally voices the highlight reel via **ElevenLabs**, and archives a standalone **Breakfast Box Score** to **Box**.
+- **Live Fly.io Sprite:** https://snorecenter-b6vmo.sprites.app
+- **Live Zero-Key Connector Proof:** https://snorecenter-b6vmo.sprites.app/connected
+
+SnoreCenter is a personal overnight room-audio broadcast agent running on a single **Fly.io Sprite** with zero raw API keys inside the container. Drop in an overnight audio tape (or test your room live for 8 seconds from the browser), and SnoreCenter slices acoustic peaks with local DSP, classifies them through **TypeSafe AI (Jev)**, checks recurring culprits across prior nights in **Pinecone**, writes dead-serious two-anchor sports commentary through **Ollama Cloud** / **OpenRouter**, optionally voices the highlight reel via **ElevenLabs**, and archives a standalone **Breakfast Box Score** to **Box**.
 
 > **Entertainment only:** SnoreCenter is built strictly for fun using ordinary room acoustics. Metrics such as *Longest Dramatic Pause* measure ordinary quiet stretches between detected room noises and are not a medical device or sleep-apnea assessment.
 
@@ -24,7 +27,8 @@ A personal overnight audio agent is idle for 23 hours and 55 minutes a day, yet 
 | **Pinecone** | Stores and queries 32-dim unit-normalized FFT acoustic signatures across nights so recurring culprits (like Tuesday's 142 Hz hallway radiator) surface with cosine scores. | `POST /query`, `POST /vectors/upsert` |
 | **Ollama Cloud** | Synthesizes grounded two-anchor morning play-by-play (Rex Vance & Margo Hale) strictly citing real DSP timestamps, dB peaks, dominant frequencies, and vector matches. | `POST /v1/chat/completions` |
 | **Box** | Archives standalone print-clean Breakfast Box Score HTML cards to `/Highlights` (and supports overnight tape drops in `/NightWatch`). | `GET /2.0/folders/0/items`, `POST /2.0/files/content` |
-| **ElevenLabs** | Voices the morning highlight reel when attached to the Sprite. | `POST /v1/text-to-speech/{voice_id}` |
+| **ElevenLabs** | Voices the dual-anchor morning highlight reel (Rex Vance & Margo Hale) when attached to the Sprite. | `POST /v1/text-to-speech/{voice_id}` |
+| **OpenRouter** | Zero-key LLM broadcast desk fallback scoped strictly to chat completions (`name_prefix: snorecenter`). | `POST /v1/chat/completions` |
 
 Outside a Sprite (local development or CI), SnoreCenter transparently reports `local-baseline` on `/connected` and runs real local PCM DSP, calibrated acoustic classification, SQLite cosine memory, and standalone HTML export with zero faked connection badges.
 

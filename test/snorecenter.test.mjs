@@ -185,7 +185,7 @@ test("End-to-end HTTP API: state, Range audio streaming, live upload, human reca
     assert.equal(health.ok, true);
 
     const conn = await (await fetch(`${base}/connected?format=json`)).json();
-    assert.equal(conn.totalCatalog, 5);
+    assert.equal(conn.totalCatalog, 6);
     assert.equal(typeof conn.envAudit.rawApiKeysInEnv, "number");
 
     // 2. Initial state seeded from real WAVs

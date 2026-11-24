@@ -122,7 +122,8 @@ export async function processAudioTape(db, wavBuffer, options = {}) {
   const commentary = await generateCommentaryWithOllama(
     draftSession,
     classifiedEvents,
-    discovery.connectors.ollama
+    discovery.connectors.ollama,
+    discovery.connectors.openrouter
   );
 
   const voice = skipVoice
@@ -218,7 +219,8 @@ export async function reclassifyEvent(db, eventId, newLabel, humanNote = "") {
   const commentary = await generateCommentaryWithOllama(
     refreshed,
     refreshed.events,
-    discovery.connectors.ollama
+    discovery.connectors.ollama,
+    discovery.connectors.openrouter
   );
 
   updateSessionCommentary(db, session.id, {
