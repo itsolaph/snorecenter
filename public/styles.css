@@ -141,6 +141,10 @@ body {
   z-index: 50;
 }
 
+.skip-link:hover {
+  color: var(--color-paper);
+}
+
 .skip-link:focus-visible {
   left: var(--space-md);
   top: var(--space-md);
@@ -441,11 +445,15 @@ p {
 .band--field {
   background-color: var(--color-field);
   color: var(--color-accent-ink);
-  padding-block: var(--space-2xl);
+  padding: var(--space-2xl) var(--space-md);
 }
 
 .band--field a {
   color: var(--color-accent-ink);
+}
+
+.band--field a:hover {
+  color: var(--color-paper-2);
 }
 
 .stage-head {
@@ -594,7 +602,7 @@ p {
 
 .section-paper2 {
   background-color: var(--color-paper-2);
-  padding-block: var(--space-2xl);
+  padding: var(--space-2xl) var(--space-md);
 }
 
 .section-head {
@@ -671,6 +679,7 @@ p {
   max-inline-size: 100%;
   max-block-size: min(36rem, 75dvh);
   container-type: inline-size;
+  padding: var(--space-xs) var(--space-sm);
   border-top: var(--rule-bar) solid var(--color-ink);
   background-color: var(--color-paper);
 }

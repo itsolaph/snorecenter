@@ -605,7 +605,7 @@ async function recordLiveEightSeconds() {
       drawMicMeter(Math.min(1, peak * 2.5));
       const elapsed = (performance.now() - started) / 1000;
       const remain = Math.max(0, 8 - elapsed);
-      el.micStatus.textContent = `Recording live room audio: ${remain.toFixed(1)}s left. Clap, whisper, or fake a snore.`;
+      el.micStatus.textContent = `Recording live room audio: ${remain.toFixed(1)}s left. Clap, whisper, or stage a snore.`;
     };
 
     source.connect(processor);
