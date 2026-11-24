@@ -39,9 +39,9 @@
   --color-paper-2: oklch(95.5% 0.008 260);
   --color-paper-3: oklch(91% 0.01 260);
   --color-ink: oklch(16% 0.012 260);
-  --color-ink-2: oklch(30% 0.014 260);
-  --color-muted: oklch(46% 0.016 260);
-  --color-rule: oklch(85% 0.012 260);
+  --color-ink-2: oklch(26% 0.014 260);
+  --color-muted: oklch(38% 0.016 260);
+  --color-rule: oklch(84% 0.012 260);
   --color-accent: oklch(52% 0.25 265);
   --color-accent-deep: oklch(40% 0.2 266);
   --color-accent-ink: oklch(98.5% 0.005 260);
@@ -373,11 +373,10 @@ p {
   cursor: not-allowed;
 }
 
-/* Hero: fits cleanly inside 1280x800 and 1440x900 */
+/* Hero: tight editorial split so cobalt replay desk previews immediately at the fold */
 .hero {
   display: grid;
   align-items: center;
-  min-height: min(46rem, 84dvh);
   padding-block: var(--space-xl);
 }
 
@@ -530,6 +529,19 @@ p {
   min-height: 1lh;
 }
 
+.mic-meter-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.mic-meter-label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-accent-ink);
+  white-space: nowrap;
+}
+
 .mic-meter {
   display: block;
   width: 11rem;
@@ -606,11 +618,8 @@ p {
 }
 
 .section-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-md);
+  display: grid;
+  gap: var(--space-xs);
   margin-bottom: var(--space-lg);
 }
 
@@ -640,6 +649,10 @@ p {
 
 .stat-cell:last-child {
   border-right: 0;
+}
+
+.unit-exact {
+  text-transform: none;
 }
 
 .fig {
@@ -795,9 +808,17 @@ p {
 
 .row-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--space-xs);
+}
+
+.row-actions .btn:first-child {
+  min-width: 6.25rem;
+}
+
+.row-actions .btn:last-child {
+  min-width: 7.75rem;
 }
 
 .conn-table {
@@ -807,7 +828,7 @@ p {
   --label-4: "Role";
 }
 
-@container (width < 600px) {
+@container (width < 780px) {
   .film-table,
   .film-table thead,
   .film-table tbody,
@@ -822,7 +843,8 @@ p {
   }
 
   .film-table tr {
-    margin-block-end: var(--space-md);
+    margin-block-end: var(--space-sm);
+    padding-bottom: var(--space-xs);
     border-top: var(--rule-bar) solid var(--color-ink);
     border-bottom: var(--rule-hair) solid var(--color-rule);
   }
@@ -831,12 +853,18 @@ p {
     position: sticky;
     inset-block-start: 0;
     z-index: 2;
+    padding: var(--space-xs) var(--space-sm);
     background-color: var(--color-paper-2);
     border-bottom: var(--rule-hair) solid var(--color-rule);
   }
 
   .film-table td {
-    padding: var(--space-sm) var(--space-md);
+    padding: var(--space-2xs) var(--space-sm);
+    border-bottom: 0;
+  }
+
+  .film-table td:last-child {
+    padding-top: var(--space-xs);
   }
 
   .film-table td:nth-child(2)::before {
@@ -939,12 +967,12 @@ p {
 .key-proof-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
-  padding-block: var(--space-md);
-  border-top: var(--rule-bar) solid var(--color-ink);
-  border-bottom: var(--rule-hair) solid var(--color-rule);
+  padding: var(--space-md);
+  background-color: var(--color-paper-2);
+  border: var(--rule-bar) solid var(--color-ink);
 }
 
 .key-proof-num {

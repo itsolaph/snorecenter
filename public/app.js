@@ -100,59 +100,116 @@ function drawSpectrogram(session, currentTimeSec = 0) {
   const h = canvas.height;
   ctx.clearRect(0, 0, w, h);
 
-  // Dark ink studio floor
+  // Layout bands: dedicated top timestamp header + dedicated right frequency lane + bottom time ruler
+  const topBand = 30;
+  const bottomBand = 22;
+  const rightAxis = 62;
+  const plotW = w - rightAxis;
+  const plotH = h - topBand - bottomBand;
+
+  // Dark studio ink background
   ctx.fillStyle = "#12151f";
   ctx.fillRect(0, 0, w, h);
 
   if (!session || !session.spectrogram) return;
   const { cols, rows, data } = session.spectrogram;
-  const cellW = w / cols;
-  const cellH = h / rows;
+  const cellW = plotW / cols;
+  const cellH = plotH / rows;
 
-  // Render real STFT log-frequency heatmap in Piste cobalt & snow ramp
+  // Subtle continuous ambient noise floor gradient across the entire tape
+  ctx.fillStyle = "#161d32";
+  ctx.fillRect(0, topBand, plotW, plotH);
+
+  // Render real STFT log-frequency heatmap as one continuous tape
   for (let c = 0; c < cols; c++) {
     for (let r = 0; r < rows; r++) {
       const v = data[c * rows + r] || 0;
-      if (v < 18) continue;
+      if (v < 8) continue;
       const t = v / 255;
-      const rr = Math.round(28 + t * t * 218);
-      const gg = Math.round(62 + t * 184);
-      const bb = Math.round(180 + t * 75);
+      const rr = Math.round(24 + t * t * 224);
+      const gg = Math.round(48 + t * 198);
+      const bb = Math.round(118 + t * 137);
       ctx.fillStyle = `rgb(${rr},${gg},${bb})`;
-      const y = h - (r + 1) * cellH;
-      ctx.fillRect(Math.floor(c * cellW), Math.floor(y), Math.ceil(cellW + 0.5), Math.ceil(cellH + 0.5));
+      const y = topBand + plotH - (r + 1) * cellH;
+      ctx.fillRect(Math.floor(c * cellW), Math.floor(y), Math.ceil(cellW + 0.6), Math.ceil(cellH + 0.6));
     }
   }
 
-  // Event bracket overlays
-  const dur = Math.max(0.1, session.durationSec || 1);
-  for (const ev of session.events || []) {
-    const x1 = (ev.startSec / dur) * w;
-    const x2 = Math.max(x1 + 3, (ev.endSec / dur) * w);
-    ctx.fillStyle = ev.needsHumanCall ? "rgba(232, 92, 54, 0.22)" : "rgba(247, 249, 255, 0.12)";
-    ctx.fillRect(x1, 0, x2 - x1, h);
-
-    ctx.fillStyle = ev.needsHumanCall ? "#e85c36" : "#f7f9ff";
-    ctx.fillRect(x1, 0, 2, h);
-
-    ctx.font = '500 13px "Barlow", sans-serif';
-    ctx.fillStyle = "#f7f9ff";
-    const tag = `${ev.clockLabel} ${ev.metrics.splPeakDb.toFixed(0)}dB`;
-    const labelX = Math.min(w - 130, x1 + 6);
-    ctx.fillText(tag, labelX, 20);
+  // Continuous real PCM waveform trace across the entire tape so it reads as one unbroken recording
+  if (Array.isArray(session.waveform) && session.waveform.length > 1) {
+    const midY = topBand + plotH * 0.84;
+    const maxAmpH = plotH * 0.14;
+    ctx.strokeStyle = "rgba(247, 249, 255, 0.78)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < session.waveform.length; i++) {
+      const x = (i / (session.waveform.length - 1)) * plotW;
+      const amp = session.waveform[i] * maxAmpH;
+      ctx.moveTo(x, midY - amp);
+      ctx.lineTo(x, midY + amp);
+    }
+    ctx.stroke();
   }
 
-  // Subtle frequency scale ruler along right edge
-  ctx.font = '400 11px "JetBrains Mono", monospace';
-  ctx.fillStyle = "rgba(247, 249, 255, 0.65)";
-  ctx.fillText("6 kHz", w - 46, 18);
-  ctx.fillText("1 kHz", w - 46, Math.round(h * 0.5));
-  ctx.fillText("80 Hz", w - 46, h - 10);
+  // Dedicated header & footer dividers
+  ctx.fillStyle = "#171c2b";
+  ctx.fillRect(0, 0, w, topBand);
+  ctx.fillRect(0, topBand + plotH, w, bottomBand);
+  ctx.fillRect(plotW, 0, rightAxis, h);
+
+  ctx.fillStyle = "rgba(247, 249, 255, 0.35)";
+  ctx.fillRect(0, topBand - 1, w, 1);
+  ctx.fillRect(0, topBand + plotH, w, 1);
+  ctx.fillRect(plotW, 0, 1, h);
+
+  // Event bracket overlays & non-overlapping header timestamps (dashed markers, not box splits)
+  const dur = Math.max(0.1, session.durationSec || 1);
+  let lastLabelRight = -10;
+  for (const ev of session.events || []) {
+    const x1 = (ev.startSec / dur) * plotW;
+    const x2 = Math.max(x1 + 3, (ev.endSec / dur) * plotW);
+    ctx.fillStyle = ev.needsHumanCall ? "rgba(232, 92, 54, 0.18)" : "rgba(247, 249, 255, 0.08)";
+    ctx.fillRect(x1, topBand, x2 - x1, plotH);
+
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = ev.needsHumanCall ? "#ff7752" : "rgba(247, 249, 255, 0.65)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x1, topBand);
+    ctx.lineTo(x1, topBand + plotH);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.font = '500 14px "Barlow", sans-serif';
+    ctx.fillStyle = ev.needsHumanCall ? "#ffb299" : "#f7f9ff";
+    const tag = `${ev.clockLabel}  ${ev.metrics.splPeakDb.toFixed(0)} dB`;
+    const tagWidth = ctx.measureText(tag).width;
+    const labelX = Math.max(lastLabelRight + 10, Math.min(plotW - tagWidth - 6, x1 + 4));
+    ctx.fillText(tag, labelX, 20);
+    lastLabelRight = labelX + tagWidth;
+  }
+
+  // Crisp full-contrast right-hand frequency axis
+  ctx.font = '400 13px "JetBrains Mono", monospace';
+  ctx.fillStyle = "#f7f9ff";
+  ctx.fillText("6 kHz", plotW + 8, topBand + 16);
+  ctx.fillText("1 kHz", plotW + 8, Math.round(topBand + plotH * 0.52));
+  ctx.fillText("80 Hz", plotW + 8, topBand + plotH - 6);
+
+  // Crisp bottom time axis
+  ctx.fillStyle = "rgba(247, 249, 255, 0.85)";
+  const ticks = 4;
+  for (let i = 0; i <= ticks; i++) {
+    const sec = (dur * i) / ticks;
+    const tx = Math.min(plotW - 44, Math.max(6, (plotW * i) / ticks - (i === 0 ? 0 : 18)));
+    ctx.fillText(`${sec.toFixed(0)}s`, tx, h - 6);
+  }
 
   // Live playhead cursor
-  const px = Math.min(w - 2, Math.max(0, (currentTimeSec / dur) * w));
+  const px = Math.min(plotW - 2, Math.max(0, (currentTimeSec / dur) * plotW));
   ctx.fillStyle = "#f7f9ff";
-  ctx.fillRect(px, 0, 2, h);
+  ctx.fillRect(px, topBand, 2, plotH);
 }
 
 function drawMicMeter(level = 0) {
@@ -177,7 +234,19 @@ function renderActiveSession() {
   const s = state.activeSession;
   if (!s) return;
 
-  el.headline.textContent = s.headline;
+  // Preserve exact acoustic unit casing ("dB") inside uppercase display headline
+  clearNode(el.headline);
+  const parts = String(s.headline || "").split(/\b(dB|DB)\b/);
+  for (const p of parts) {
+    if (p === "dB" || p === "DB") {
+      const span = document.createElement("span");
+      span.className = "unit-exact";
+      span.textContent = "dB";
+      el.headline.append(span);
+    } else if (p) {
+      el.headline.append(document.createTextNode(p));
+    }
+  }
   el.subhead.textContent = s.subhead;
   el.boxScoreDate.textContent = `${s.title} (${s.nightDate}), ${s.durationSec.toFixed(1)}s tape, ${s.ambientSplDb.toFixed(0)} dB room floor.`;
 
@@ -383,7 +452,7 @@ function renderLedgerAndProof() {
   }
 
   if (state.connectors) {
-    el.rawKeyCount.textContent = String(state.connectors.envAudit.rawApiKeysInEnv);
+    el.rawKeyCount.textContent = `${state.connectors.envAudit.rawApiKeysInEnv} keys`;
     el.runtimeModeNote.textContent = state.connectors.insideSprite
       ? `Fly.io Sprite live gateway (${state.connectors.connectedCount}/${state.connectors.totalCatalog} active)`
       : `Local preview mode (${state.connectors.connectedCount}/${state.connectors.totalCatalog} Sprite gateways)`;
@@ -750,7 +819,9 @@ el.btnRerun.addEventListener("click", async () => {
 el.canvas.addEventListener("click", (e) => {
   if (!state.activeSession) return;
   const rect = el.canvas.getBoundingClientRect();
-  const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const plotFrac = (el.canvas.width - 62) / el.canvas.width;
+  const plotCssW = rect.width * plotFrac;
+  const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / plotCssW));
   const sec = ratio * state.activeSession.durationSec;
   playSegment(sec, null);
 });

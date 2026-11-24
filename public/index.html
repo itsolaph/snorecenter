@@ -45,7 +45,7 @@
         <div class="hero__visual">
           <img
             src="/assets/hero-desk.jpg"
-            alt="Brushed silver broadcast desk microphone beside a white coffee mug and printed cobalt audio waveform sheet in bright morning light"
+            alt="Unmade white linen bed beside a pale nightstand holding a face-up phone glowing cobalt, an analog clock at 7:05, and a square white coffee mug in cool morning light"
             width="1376"
             height="768"
             fetchpriority="high"
@@ -85,13 +85,16 @@
 
           <div class="mic-status-bar">
             <p id="mic-status" class="mic-status-text" role="status" aria-live="polite">Ready. Click any peak on the spectrogram to jump straight to that moment, or record 8 seconds from your microphone.</p>
-            <canvas
-              id="mic-meter"
-              class="mic-meter"
-              width="220"
-              height="32"
-              role="img"
-              aria-label="Live microphone input level meter"></canvas>
+            <div class="mic-meter-wrap">
+              <span class="mic-meter-label">Mic level</span>
+              <canvas
+                id="mic-meter"
+                class="mic-meter"
+                width="220"
+                height="32"
+                role="img"
+                aria-label="Live microphone input level meter"></canvas>
+            </div>
           </div>
         </div>
 
@@ -137,7 +140,7 @@
       <div class="shell">
         <div class="section-head">
           <h2 id="film-heading">Event film ledger</h2>
-          <p class="section-lead">Events below 70% Jev confidence pause for your booth ruling and save their 32-dim FFT signature for tomorrow night.</p>
+          <p class="section-lead">Events below 70% Jev confidence pause for your booth ruling and save their acoustic fingerprint for tomorrow night.</p>
         </div>
 
         <div tabindex="0" role="region" aria-labelledby="film-table-caption" class="table-wrapper">
