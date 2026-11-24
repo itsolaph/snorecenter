@@ -90,8 +90,19 @@ async function readBody(req, limit = MAX_UPLOAD_BYTES) {
   return Buffer.concat(chunks);
 }
 
+function escHtml(v) {
+  return String(v ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
 async function serveFileWithRange(req, res, filePath) {
   const stat = await fsp.stat(filePath);
+  if (!stat.isFile()) {
+    return sendJson(res, 404, { error: "Not found" });
+  }
   const ext = path.extname(filePath).toLowerCase();
   const mime = MIME_TYPES[ext] || "application/octet-stream";
   const range = req.headers.range;
@@ -101,6 +112,15 @@ async function serveFileWithRange(req, res, filePath) {
     "Accept-Ranges": "bytes",
     "X-Content-Type-Options": "nosniff",
     "Cache-Control": ext === ".woff2" || ext === ".jpg" ? "public, max-age=86400" : "no-cache",
+  };
+
+  const pipeSafe = (stream) => {
+    stream.on("error", () => {
+      if (!res.headersSent) res.writeHead(500);
+      res.destroy();
+    });
+    res.on("close", () => stream.destroy());
+    stream.pipe(res);
   };
 
   if (range) {
@@ -118,13 +138,13 @@ async function serveFileWithRange(req, res, filePath) {
         "Content-Range": `bytes ${start}-${end}/${stat.size}`,
         "Content-Length": end - start + 1,
       });
-      fs.createReadStream(filePath, { start, end }).pipe(res);
+      pipeSafe(fs.createReadStream(filePath, { start, end }));
       return;
     }
   }
 
   res.writeHead(200, { ...baseHeaders, "Content-Length": stat.size });
-  fs.createReadStream(filePath).pipe(res);
+  pipeSafe(fs.createReadStream(filePath));
 }
 
 function safeResolve(baseDir, relPath) {
@@ -141,10 +161,10 @@ function renderConnectedProofHtml(proof) {
     .sort((a, b) => Number(Boolean(b.connected)) - Number(Boolean(a.connected)))
     .map(
       (c) => `<tr>
-        <td><strong>${c.name}</strong></td>
-        <td>${c.connected ? "Connected via Sprite Gateway" : c.mode}</td>
-        <td>${c.gatewayBaseUrl ? `<code>${c.gatewayBaseUrl}</code>` : "Local baseline fallback"}</td>
-        <td>${c.role}</td>
+        <td><strong>${escHtml(c.name)}</strong></td>
+        <td>${c.connected ? "Connected via Sprite Gateway" : escHtml(c.mode)}</td>
+        <td>${c.gatewayBaseUrl ? `<code>${escHtml(c.gatewayBaseUrl)}</code>` : "Local baseline fallback"}</td>
+        <td>${escHtml(c.role)}</td>
       </tr>`
     )
     .join("");
@@ -196,11 +216,41 @@ export async function createAppServer(options = {}) {
   const binaries = await probeAudioBinaries();
   await seedInitialTapesIfEmpty(db, SAMPLES_DIR, audioDir);
 
+  const postBuckets = new Map();
+  const RATE_WINDOW_MS = 60_000;
+  const RATE_MAX_POSTS = 15;
+
+  const checkPostRateLimit = (req) => {
+    const ip =
+      String(req.headers["fly-client-ip"] || req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown")
+        .split(",")[0]
+        .trim();
+    if (ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1") return true;
+    const now = Date.now();
+    if (postBuckets.size > 1000) {
+      for (const [k, ts] of postBuckets) {
+        if (now - ts[ts.length - 1] > RATE_WINDOW_MS) postBuckets.delete(k);
+      }
+    }
+    const list = (postBuckets.get(ip) || []).filter((t) => now - t < RATE_WINDOW_MS);
+    if (list.length >= RATE_MAX_POSTS) {
+      postBuckets.set(ip, list);
+      return false;
+    }
+    list.push(now);
+    postBuckets.set(ip, list);
+    return true;
+  };
+
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
       const pathname = url.pathname;
       const method = req.method || "GET";
+
+      if (method === "POST" && !checkPostRateLimit(req)) {
+        return sendJson(res, 429, { error: "Rate limit exceeded; please retry shortly" });
+      }
 
       // Health endpoint
       if (method === "GET" && pathname === "/healthz") {
@@ -385,7 +435,7 @@ export async function createAppServer(options = {}) {
       // Audio streaming with Range support
       if (method === "GET" && pathname.startsWith("/audio/")) {
         const filePath = safeResolve(audioDir, pathname.slice("/audio/".length));
-        if (!filePath || !fs.existsSync(filePath)) {
+        if (!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
           return sendJson(res, 404, { error: "Audio clip not found" });
         }
         return await serveFileWithRange(req, res, filePath);
