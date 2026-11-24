@@ -138,6 +138,7 @@ function safeResolve(baseDir, relPath) {
 
 function renderConnectedProofHtml(proof) {
   const rows = Object.values(proof.connectors)
+    .sort((a, b) => Number(Boolean(b.connected)) - Number(Boolean(a.connected)))
     .map(
       (c) => `<tr>
         <td><strong>${c.name}</strong></td>

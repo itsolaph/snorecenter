@@ -468,7 +468,10 @@ function renderLedgerAndProof() {
       : `Local preview mode (${state.connectors.connectedCount}/${state.connectors.totalCatalog} Sprite gateways)`;
 
     clearNode(el.connectorsList);
-    for (const c of Object.values(state.connectors.connectors)) {
+    const orderedConnectors = Object.values(state.connectors.connectors).sort(
+      (a, b) => Number(Boolean(b.connected)) - Number(Boolean(a.connected))
+    );
+    for (const c of orderedConnectors) {
       const li = document.createElement("li");
       li.className = "ruled-item";
       const main = document.createElement("div");
