@@ -628,51 +628,63 @@ export async function generateCommentaryWithOllama(session, events, connector) {
 }
 
 /**
- * Optionally synthesize voiced broadcast commentary via ElevenLabs Sprite Connector.
+ * Synthesize dual-anchor voiced broadcast commentary (Rex Vance + Margo Hale)
+ * via ElevenLabs Sprite Connector. Concatenates per-line MP3 clips cleanly with zero
+ * local API keys; degrades honestly to native room WAV replay when offline.
  */
 export async function synthesizeHighlightAudio(lines, audioDir, sessionId, connector) {
   if (!connector?.connected || !connector.gatewayBaseUrl) {
     return {
       filename: null,
       source: "native-room-replay",
-      note: "Room WAV plays directly in browser; attach ElevenLabs Sprite Connector for voiced broadcast mix.",
+      note: "Room WAV plays directly in browser; attach ElevenLabs Sprite Connector for voiced dual-anchor mix.",
     };
   }
 
+  const rexVoice = process.env.ELEVENLABS_REX_VOICE_ID || "pNInz6obpgDQGcFmaJgB";
+  const margoVoice = process.env.ELEVENLABS_MARGO_VOICE_ID || "EXAVITQu4vr4xnSDxMaL";
+  const modelId = process.env.ELEVENLABS_MODEL_ID || "eleven_turbo_v2_5";
+  const base = connector.gatewayBaseUrl.replace(/\/$/, "");
+
   try {
-    const voiceId = process.env.ELEVENLABS_VOICE_ID || "pNInz6obpgDQGcFmaJgB";
-    const scriptText = lines.map((l) => `${l.speaker}: ${l.text}`).join(" ");
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 20000);
-    const res = await fetch(
-      `${connector.gatewayBaseUrl.replace(/\/$/, "")}/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
-      {
+    const mp3Buffers = [];
+    for (const line of (lines || []).slice(0, 4)) {
+      const voiceId = line.speaker === "Margo Hale" ? margoVoice : rexVoice;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 18000);
+      const res = await fetch(`${base}/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "audio/mpeg",
         },
         body: JSON.stringify({
-          text: scriptText.slice(0, 1400),
-          model_id: process.env.ELEVENLABS_MODEL_ID || "eleven_turbo_v2_5",
+          text: String(line.text || "").slice(0, 360),
+          model_id: modelId,
         }),
         signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) {
+        return { filename: null, source: "native-room-replay", error: `HTTP ${res.status}` };
       }
-    );
-    clearTimeout(timer);
-
-    if (res.ok) {
-      const audioBuf = Buffer.from(await res.arrayBuffer());
-      const filename = `${sessionId}-broadcast.mp3`;
-      await fsp.mkdir(audioDir, { recursive: true });
-      await fsp.writeFile(path.join(audioDir, filename), audioBuf);
-      return {
-        filename,
-        source: "elevenlabs-sprite-gateway",
-        bytes: audioBuf.length,
-      };
+      mp3Buffers.push(Buffer.from(await res.arrayBuffer()));
     }
-    return { filename: null, source: "native-room-replay", error: `HTTP ${res.status}` };
+
+    if (mp3Buffers.length === 0) {
+      return { filename: null, source: "native-room-replay" };
+    }
+
+    const combined = Buffer.concat(mp3Buffers);
+    const filename = `${sessionId}-broadcast.mp3`;
+    await fsp.mkdir(audioDir, { recursive: true });
+    await fsp.writeFile(path.join(audioDir, filename), combined);
+    return {
+      filename,
+      source: "elevenlabs-sprite-gateway (dual-anchor)",
+      bytes: combined.length,
+      linesVoiced: mp3Buffers.length,
+    };
   } catch (err) {
     return { filename: null, source: "native-room-replay", error: err.message };
   }

@@ -29,7 +29,9 @@ const el = {
   subhead: document.getElementById("broadcast-subhead"),
   canvas: document.getElementById("spectrogram-canvas"),
   audio: document.getElementById("tape-audio"),
+  boothAudio: document.getElementById("booth-audio"),
   btnPlay: document.getElementById("btn-play-toggle"),
+  btnPlayBooth: document.getElementById("btn-play-booth"),
   btnSlowMo: document.getElementById("btn-slowmo"),
   btnRerun: document.getElementById("btn-rerun-sample"),
   clock: document.getElementById("deck-clock"),
@@ -267,6 +269,14 @@ function renderActiveSession() {
     el.audio.dataset.sessionId = s.id;
     el.audio.playbackRate = state.slowMo ? 0.65 : 1.0;
     el.btnPlay.textContent = "Play tape";
+    if (s.highlightAudioUrl) {
+      el.boothAudio.src = s.highlightAudioUrl;
+      el.btnPlayBooth.hidden = false;
+      el.btnPlayBooth.textContent = "Play voiced booth";
+    } else {
+      el.boothAudio.removeAttribute("src");
+      el.btnPlayBooth.hidden = true;
+    }
   }
 
   el.clock.textContent = `${fmtSec(el.audio.currentTime || 0)} / ${fmtSec(s.durationSec)}`;
@@ -783,6 +793,23 @@ el.audio.addEventListener("ended", () => {
   el.btnPlay.textContent = "Play tape";
   state.clipStopAt = null;
   if (state.activeSession) drawSpectrogram(state.activeSession, 0);
+});
+
+el.btnPlayBooth.addEventListener("click", () => {
+  if (!state.activeSession?.highlightAudioUrl) return;
+  if (el.boothAudio.paused) {
+    el.audio.pause();
+    el.btnPlay.textContent = "Play tape";
+    el.boothAudio.play().catch(() => {});
+    el.btnPlayBooth.textContent = "Pause booth";
+  } else {
+    el.boothAudio.pause();
+    el.btnPlayBooth.textContent = "Play voiced booth";
+  }
+});
+
+el.boothAudio.addEventListener("ended", () => {
+  el.btnPlayBooth.textContent = "Play voiced booth";
 });
 
 el.btnSlowMo.addEventListener("click", () => {

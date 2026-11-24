@@ -73,10 +73,12 @@
           </div>
 
           <audio id="tape-audio" preload="metadata"></audio>
+          <audio id="booth-audio" preload="none"></audio>
 
           <div class="deck-controls">
             <div class="deck-controls__left">
               <button type="button" id="btn-play-toggle" class="btn btn--on-field btn--compact">Play tape</button>
+              <button type="button" id="btn-play-booth" class="btn btn--field-outline btn--compact" hidden>Play voiced booth</button>
               <button type="button" id="btn-slowmo" class="btn btn--field-outline btn--compact" aria-pressed="false">Slow-mo 0.65x</button>
               <button type="button" id="btn-rerun-sample" class="btn btn--field-outline btn--compact">Run fresh cut</button>
             </div>
