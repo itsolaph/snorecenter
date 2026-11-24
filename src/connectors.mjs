@@ -125,11 +125,13 @@ export async function discoverConnectors(forceRefresh = false) {
     });
 
     if (matched) {
+      const connId = matched.connection_id || matched.id || null;
+      const providerSlug = matched.provider || spec.key;
       const baseUrl =
         matched.gateway_base_url ||
         matched.base_url ||
-        (matched.provider && matched.connection_id
-          ? `${SPRITE_API_BASE.replace(/\/$/, "")}/v1/gateway/${matched.provider}/${matched.connection_id}`
+        (providerSlug && connId
+          ? `${SPRITE_API_BASE.replace(/\/$/, "")}/v1/gateway/${providerSlug}/${connId}`
           : null);
       connectors[spec.key] = {
         key: spec.key,
@@ -138,9 +140,13 @@ export async function discoverConnectors(forceRefresh = false) {
         connected: Boolean(baseUrl),
         mode: baseUrl ? "sprite-gateway" : "pending-setup",
         gatewayBaseUrl: baseUrl,
-        connectionId: matched.connection_id || matched.id || null,
-        provider: matched.provider || spec.key,
-        scopes: matched.scopes || [],
+        connectionId: connId,
+        provider: providerSlug,
+        scopes: Array.isArray(matched.scopes)
+          ? matched.scopes
+          : typeof matched.scopes === "string" && matched.scopes.trim()
+            ? matched.scopes.split(",").map((s) => s.trim())
+            : [],
         setupUrl: matched.setup_url || null,
       };
     } else {
@@ -779,23 +785,54 @@ export async function archiveBreakfastToBox(session, htmlCard, exportsDir, conne
   };
 }
 
+function resolveSpriteEnvBin() {
+  if (fs.existsSync("/.sprite/bin/sprite-env")) return "/.sprite/bin/sprite-env";
+  return "sprite-env";
+}
+
 /**
- * List read-only Fly.io Sprite checkpoints mounted at `/.sprite/checkpoints/`,
- * plus local SQLite snapshots when outside a Sprite.
+ * List Fly.io Sprite CoW checkpoints (via `sprite-env checkpoint list` and
+ * read-only mounts at `/.sprite/checkpoints/`), plus local SQLite snapshots.
  */
 export async function listCheckpoints(localCheckpointsDir) {
-  const results = [];
+  const byId = new Map();
+
+  if (isInsideSprite()) {
+    try {
+      const { stdout } = await execFileAsync(
+        resolveSpriteEnvBin(),
+        ["checkpoint", "list"],
+        { timeout: 6000 }
+      );
+      const parsed = JSON.parse(stdout);
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (!item || !item.id || item.id === "Current") continue;
+          byId.set(item.id, {
+            id: item.id,
+            comment: item.comment || "Fly.io Sprite CoW checkpoint",
+            mode: "sprite-cow-checkpoint",
+            createdAt: item.create_time || new Date().toISOString(),
+            readOnly: true,
+          });
+        }
+      }
+    } catch {
+      // Fall through to directory mount check
+    }
+  }
 
   if (fs.existsSync(SPRITE_CHECKPOINTS_DIR)) {
     try {
       const entries = await fsp.readdir(SPRITE_CHECKPOINTS_DIR, { withFileTypes: true });
       for (const ent of entries) {
-        if (!ent.isDirectory()) continue;
+        if (!ent.isDirectory() || byId.has(ent.name)) continue;
         const full = path.join(SPRITE_CHECKPOINTS_DIR, ent.name);
         const stat = await fsp.stat(full);
-        results.push({
+        byId.set(ent.name, {
           id: ent.name,
           mountPath: full,
+          comment: "Read-only checkpoint mount",
           mode: "sprite-cow-checkpoint",
           createdAt: stat.mtime.toISOString(),
           readOnly: true,
@@ -812,14 +849,17 @@ export async function listCheckpoints(localCheckpointsDir) {
       for (const ent of entries) {
         if (!ent.isFile() || !ent.name.endsWith(".json")) continue;
         const raw = await fsp.readFile(path.join(localCheckpointsDir, ent.name), "utf8");
-        results.push(JSON.parse(raw));
+        const item = JSON.parse(raw);
+        if (item?.id && !byId.has(item.id)) byId.set(item.id, item);
       }
     } catch {
       // Ignore malformed local checkpoints
     }
   }
 
-  return results.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 8);
+  return Array.from(byId.values())
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .slice(0, 8);
 }
 
 /**
@@ -832,20 +872,19 @@ export async function createCheckpoint(comment, dbPath, localCheckpointsDir) {
   if (isInsideSprite()) {
     try {
       const { stdout } = await execFileAsync(
-        "sprite-env",
+        resolveSpriteEnvBin(),
         ["checkpoint", "create", "--comment", safeComment],
         { timeout: 15000 }
       );
-      const idMatch = stdout.match(/(v\d+|[a-zA-Z0-9_-]{6,})/);
+      const idMatch = stdout.match(/\b(v\d+)\b/);
       return {
         id: idMatch ? idMatch[1] : `cp_${Date.now()}`,
         comment: safeComment,
         mode: "sprite-cow-checkpoint",
         createdAt: new Date().toISOString(),
-        rawOutput: stdout.trim().slice(0, 160),
+        readOnly: true,
       };
     } catch (err) {
-      // Fall through to local snapshot with explicit reason
       const snap = await createLocalSnapshot(safeComment, dbPath, localCheckpointsDir, err.message);
       return snap;
     }
