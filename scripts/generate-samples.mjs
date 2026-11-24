@@ -1,8 +1,14 @@
 /**
- * Physics-based overnight room audio synthesizer.
- * Produces real, playable, acoustically distinct 16kHz mono PCM WAV files so
- * SnoreCenter's DSP slicer, FFT spectrogram, TypeSafe Jev scorer, and Pinecone
- * acoustic vector memory run on genuine audio signals (zero mock JSON).
+ * Synthesizes two realistic overnight room audio PCM WAV tapes for SnoreCenter:
+ * 1. `samples/tuesday-baseline.wav` — Tuesday night recording containing the hallway
+ *    radiator pipe clank (142Hz + 428Hz + 890Hz metallic harmonics), dog bark, and deep snore.
+ * 2. `samples/last-night-highlight.wav` — Last night's 26-second compressed highlight tape
+ *    containing five acoustically distinct events:
+ *      - 01:02 AM Snore crescendo (sustained low-band rhythmic breathing rumble)
+ *      - 02:14 AM Porch terrier ambush (3 sharp high-frequency impulsive barks)
+ *      - 02:54 AM Hallway radiator clank (same metallic resonance with realistic night jitter -> ~0.95 cosine match)
+ *      - 03:38 AM Midnight fridge raid (footstep thuds + door latch clicks + 60Hz compressor hum)
+ *      - 04:36 AM Ambiguous sleep mumble (quiet mid-band vocal formant -> <70% Jev confidence -> "You call it")
  */
 
 import fs from "node:fs/promises";
@@ -14,177 +20,195 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SAMPLES_DIR = path.resolve(__dirname, "..", "samples");
 const SR = 16000;
 
-function seededRandom(seed) {
-  let s = seed >>> 0;
+function mulberry32(seed) {
+  let a = seed >>> 0;
   return () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return (s & 0xfffffff) / 0x10000000;
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
 
-function addRoomNoise(buf, amp, rng) {
+function makeRoomFloor(durationSec, seed) {
+  const rand = mulberry32(seed);
+  const n = Math.round(durationSec * SR);
+  const buf = new Float32Array(n);
   let lp = 0;
-  for (let i = 0; i < buf.length; i++) {
-    const white = rng() * 2 - 1;
-    lp = lp * 0.86 + white * 0.14;
-    buf[i] += lp * amp;
+  for (let i = 0; i < n; i++) {
+    const white = rand() * 2 - 1;
+    lp = 0.94 * lp + 0.06 * white;
+    const hum = 0.0022 * Math.sin((2 * Math.PI * 60 * i) / SR);
+    buf[i] = lp * 0.0055 + hum;
   }
+  return buf;
 }
 
 /**
- * Rhythmic low-frequency snore crescendo (3 respiratory cycles with soft palate flutter).
+ * Low-frequency rhythmic snore rally (dominant energy 95-360Hz, strong 0.65Hz breath cycles).
  */
-function addSnoreRally(buf, startSec, cycles, peakAmp, rng) {
-  const cycleDur = 1.65;
-  for (let c = 0; c < cycles; c++) {
-    const t0 = startSec + c * cycleDur;
-    const dur = 1.15;
-    const intensity = peakAmp * (0.58 + 0.42 * (c / Math.max(1, cycles - 1)));
-    const startIdx = Math.floor(t0 * SR);
-    const len = Math.floor(dur * SR);
-    let phase1 = 0;
-    let phase2 = 0;
-    let breathLp = 0;
-    for (let i = 0; i < len && startIdx + i < buf.length; i++) {
-      const u = i / len;
-      const env = Math.sin(Math.PI * u) ** 1.35;
-      // Soft-palate flutter ~32Hz modulating a 115-155Hz rasp
-      const flutter = 0.65 + 0.35 * Math.sin(2 * Math.PI * 31 * (i / SR));
-      const f0 = 112 + 34 * Math.sin(Math.PI * u) + c * 6;
-      phase1 += (2 * Math.PI * f0) / SR;
-      phase2 += (2 * Math.PI * f0 * 2.02) / SR;
-      const rasp = Math.sin(phase1) * 0.62 + Math.sin(phase2) * 0.28 + Math.sin(phase1 * 3) * 0.12;
-      const noise = rng() * 2 - 1;
-      breathLp = breathLp * 0.72 + noise * 0.28;
-      buf[startIdx + i] += (rasp * 0.72 + breathLp * 0.42) * flutter * env * intensity;
-    }
-  }
-}
-
-/**
- * Two sharp mid-band dog barks (impulsive 480-950Hz harmonic bursts).
- */
-function addDogBarks(buf, startSec, amp, rng) {
-  const offsets = [0, 0.48, 0.92];
-  for (let b = 0; b < offsets.length; b++) {
-    const startIdx = Math.floor((startSec + offsets[b]) * SR);
-    const len = Math.floor(0.24 * SR);
-    let p = 0;
-    for (let i = 0; i < len && startIdx + i < buf.length; i++) {
-      const u = i / len;
-      const env = u < 0.12 ? u / 0.12 : Math.exp(-5.2 * (u - 0.12));
-      const freq = 690 - 290 * u + (b === 1 ? 65 : 0);
-      p += (2 * Math.PI * freq) / SR;
-      const tone = Math.sin(p) * 0.55 + Math.sin(p * 1.98) * 0.35 + Math.sin(p * 3.04) * 0.18;
-      const grit = (rng() * 2 - 1) * 0.22;
-      buf[startIdx + i] += (tone + grit) * env * amp;
-    }
-  }
-}
-
-/**
- * Metallic radiator clank (142Hz fundamental + 428Hz & 1190Hz damped metallic overtones).
- * Used in BOTH Tuesday's archive and Last Night so Pinecone matches it at high cosine similarity!
- */
-function addRadiatorClank(buf, startSec, amp, rng) {
-  const hits = [0, 0.62];
-  for (const off of hits) {
-    const startIdx = Math.floor((startSec + off) * SR);
-    const len = Math.floor(0.55 * SR);
-    for (let i = 0; i < len && startIdx + i < buf.length; i++) {
-      const t = i / SR;
-      const strike = Math.exp(-26 * t) * (rng() * 2 - 1) * 0.4;
-      const ring =
-        Math.sin(2 * Math.PI * 142 * t) * Math.exp(-6.5 * t) * 0.55 +
-        Math.sin(2 * Math.PI * 428 * t) * Math.exp(-9.0 * t) * 0.38 +
-        Math.sin(2 * Math.PI * 1190 * t) * Math.exp(-13.5 * t) * 0.24;
-      buf[startIdx + i] += (strike + ring) * amp;
-    }
-  }
-}
-
-/**
- * 03:12 AM Fridge raid: rubber seal thump + 60Hz compressor hum + glass bottle clink + door shut.
- */
-function addFridgeRaid(buf, startSec, amp, rng) {
-  const startIdx = Math.floor(startSec * SR);
-  const len = Math.floor(2.9 * SR);
-  for (let i = 0; i < len && startIdx + i < buf.length; i++) {
+function addSnoreRally(buf, startSec, durationSec, amp = 0.68, seed = 11) {
+  const rand = mulberry32(seed);
+  const s0 = Math.floor(startSec * SR);
+  const len = Math.floor(durationSec * SR);
+  let breathLp = 0;
+  for (let i = 0; i < len && s0 + i < buf.length; i++) {
     const t = i / SR;
-    let sig = 0;
-    // Opening suction pop at t=0.05..0.22
-    if (t < 0.22) {
-      sig += Math.sin(2 * Math.PI * (95 + 140 * t) * t) * Math.exp(-12 * t) * 0.55;
+    const cyclePos = (t % 1.45) / 1.45;
+    const inhaleEnv = cyclePos < 0.68 ? Math.sin((cyclePos / 0.68) * Math.PI) : 0.02;
+    const overallEnv = Math.min(1, t / 0.25) * Math.min(1, (durationSec - t) / 0.25);
+    const rasp = 0.62 + 0.38 * Math.sin(2 * Math.PI * 26 * t);
+    // Low-pass filtered breath turbulence (keeps spectral centroid firmly low)
+    breathLp = 0.88 * breathLp + 0.12 * (rand() * 2 - 1);
+    const fundamental =
+      0.56 * Math.sin(2 * Math.PI * 108 * t) +
+      0.34 * Math.sin(2 * Math.PI * 216 * t) +
+      0.16 * Math.sin(2 * Math.PI * 324 * t) +
+      0.14 * breathLp;
+    buf[s0 + i] += amp * overallEnv * inhaleEnv * rasp * fundamental;
+  }
+}
+
+/**
+ * Sharp high-crest impulsive dog barks (high centroid 1100-2300Hz, staccato envelopes).
+ */
+function addDogBarks(buf, startSec, amp = 0.82, seed = 23, pitchShift = 1.0) {
+  const rand = mulberry32(seed);
+  const offsets = [0, 0.42, 0.88];
+  for (let b = 0; b < offsets.length; b++) {
+    const s0 = Math.floor((startSec + offsets[b]) * SR);
+    const dur = 0.2;
+    const len = Math.floor(dur * SR);
+    for (let i = 0; i < len && s0 + i < buf.length; i++) {
+      const t = i / SR;
+      const env = Math.pow(Math.sin((t / dur) * Math.PI), 0.7) * Math.exp(-t * 5.2);
+      const f0 = (680 - 240 * (t / dur)) * pitchShift;
+      const sig =
+        0.35 * Math.sin(2 * Math.PI * f0 * t) +
+        0.42 * Math.sin(2 * Math.PI * f0 * 2.1 * t) +
+        0.3 * Math.sin(2 * Math.PI * f0 * 3.4 * t) +
+        0.22 * (rand() * 2 - 1);
+      buf[s0 + i] += amp * env * sig;
     }
-    // Exposed 60Hz + 120Hz fridge compressor hum while door is open
-    if (t > 0.15 && t < 2.55) {
-      const hEnv = Math.min(1, (t - 0.15) * 4) * Math.min(1, (2.55 - t) * 4);
-      sig += (Math.sin(2 * Math.PI * 60 * t) * 0.28 + Math.sin(2 * Math.PI * 120 * t) * 0.22) * hEnv;
+  }
+}
+
+/**
+ * Metallic hallway radiator pipe clank (sharp resonant ring at 142Hz, 428Hz, 892Hz).
+ */
+function addRadiatorClank(buf, startSec, amp = 0.62, detune = 1.0) {
+  const strikes = [0, 0.56];
+  for (const off of strikes) {
+    const s0 = Math.floor((startSec + off) * SR);
+    const dur = 0.72;
+    const len = Math.floor(dur * SR);
+    for (let i = 0; i < len && s0 + i < buf.length; i++) {
+      const t = i / SR;
+      const attack = Math.min(1, t / 0.004);
+      const decay = Math.exp(-t * 6.8);
+      const metallic =
+        0.44 * Math.sin(2 * Math.PI * 142 * detune * t) +
+        0.4 * Math.sin(2 * Math.PI * 428 * detune * t) +
+        0.26 * Math.sin(2 * Math.PI * 892 * detune * t) +
+        0.1 * Math.sin(2 * Math.PI * 1340 * detune * t);
+      buf[s0 + i] += amp * attack * decay * metallic;
     }
-    // Glass bottle clinks at t=1.05 and t=1.62
-    for (const ct of [1.05, 1.62]) {
-      if (t >= ct && t < ct + 0.35) {
-        const dt = t - ct;
-        sig +=
-          (Math.sin(2 * Math.PI * 2420 * dt) * 0.45 + Math.sin(2 * Math.PI * 3890 * dt) * 0.28) *
-          Math.exp(-16 * dt);
+  }
+}
+
+/**
+ * 03:38 AM midnight fridge raid: heavy footsteps + bright gasket/latch clicks + 60Hz compressor hum.
+ */
+function addFridgeRaid(buf, startSec, amp = 0.52, seed = 47) {
+  const rand = mulberry32(seed);
+  const s0 = Math.floor(startSec * SR);
+  const dur = 3.0;
+  const len = Math.floor(dur * SR);
+  for (let i = 0; i < len && s0 + i < buf.length; i++) {
+    const t = i / SR;
+    let v = 0;
+    // Two floorboard footsteps
+    for (const stepT of [0.12, 0.52]) {
+      const dt = t - stepT;
+      if (dt >= 0 && dt < 0.14) {
+        v += 0.5 * Math.exp(-dt * 24) * Math.sin(2 * Math.PI * 85 * dt);
       }
     }
-    // Door shut thud at t=2.48
-    if (t >= 2.48 && t < 2.75) {
-      const dt = t - 2.48;
-      sig += (Math.sin(2 * Math.PI * 78 * dt) * 0.72 + (rng() * 2 - 1) * 0.18) * Math.exp(-14 * dt);
+    // Broad-spectrum gasket seal pop & glass jar rattle (high band energy!)
+    for (const clickT of [0.95, 1.42, 2.35]) {
+      const dt = t - clickT;
+      if (dt >= 0 && dt < 0.12) {
+        const clickNoise = (rand() * 2 - 1) * Math.exp(-dt * 28);
+        v += 0.65 * clickNoise + 0.3 * Math.exp(-dt * 32) * Math.sin(2 * Math.PI * 2850 * dt);
+      }
     }
-    buf[startIdx + i] += sig * amp;
+    // Refrigerator motor hum + subtle open-door hiss while open (0.95s..2.5s)
+    if (t >= 0.95 && t <= 2.6) {
+      v +=
+        0.24 * Math.sin(2 * Math.PI * 60 * t) +
+        0.16 * Math.sin(2 * Math.PI * 120 * t) +
+        0.14 * (rand() * 2 - 1);
+    }
+    buf[s0 + i] += amp * v;
   }
 }
 
 /**
- * Ambiguous sleep mumble / pillow rustle: soft mid-band formant bursts intentionally near
- * the classification boundary so TypeSafe Jev triggers a "You call it" human review chip.
+ * Quiet, ambiguous sleep mumble / pillow vocal formant (~550-750Hz smooth syllables).
+ * Intentionally moderate amplitude & blended mid-low formants so Jev splits probabilities < 0.70.
  */
-function addSleepMumble(buf, startSec, amp, rng) {
-  const startIdx = Math.floor(startSec * SR);
-  const len = Math.floor(1.45 * SR);
+function addSleepMumble(buf, startSec, amp = 0.21, seed = 91) {
+  const rand = mulberry32(seed);
+  const s0 = Math.floor(startSec * SR);
+  const dur = 1.75;
+  const len = Math.floor(dur * SR);
   let lp = 0;
-  for (let i = 0; i < len && startIdx + i < buf.length; i++) {
+  for (let i = 0; i < len && s0 + i < buf.length; i++) {
     const t = i / SR;
-    const syllables = 0.5 + 0.5 * Math.sin(2 * Math.PI * 3.8 * t);
-    const env = Math.sin((Math.PI * i) / len) * syllables;
-    const voice =
-      Math.sin(2 * Math.PI * (185 + 22 * Math.sin(6 * t)) * t) * 0.38 +
-      Math.sin(2 * Math.PI * 520 * t) * 0.22 +
-      Math.sin(2 * Math.PI * 1340 * t) * 0.12;
-    const rustle = rng() * 2 - 1;
-    lp = lp * 0.65 + rustle * 0.35;
-    buf[startIdx + i] += (voice * 0.6 + lp * 0.55) * env * amp;
+    const syllables =
+      0.5 + 0.5 * Math.sin(2 * Math.PI * 2.9 * t) * Math.sin((t / dur) * Math.PI);
+    const f1 = 290 + 45 * Math.sin(2 * Math.PI * 1.4 * t);
+    const f2 = 690 + 95 * Math.cos(2 * Math.PI * 2.1 * t);
+    lp = 0.75 * lp + 0.25 * (rand() * 2 - 1);
+    const sig =
+      0.42 * Math.sin(2 * Math.PI * f1 * t) +
+      0.32 * Math.sin(2 * Math.PI * f2 * t) +
+      0.26 * lp;
+    buf[s0 + i] += amp * syllables * sig;
   }
+}
+
+function clampBuffer(buf) {
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] > 0.95) buf[i] = 0.95;
+    else if (buf[i] < -0.95) buf[i] = -0.95;
+  }
+  return buf;
 }
 
 async function main() {
   await fs.mkdir(SAMPLES_DIR, { recursive: true });
 
-  // 1. Tuesday Archive Baseline (14s) — seeds Pinecone & SQLite prior night memory
-  const rngTue = seededRandom(20261122);
-  const tue = new Float32Array(14 * SR);
-  addRoomNoise(tue, 0.0045, rngTue);
-  addRadiatorClank(tue, 2.2, 0.48, rngTue);
-  addDogBarks(tue, 6.8, 0.52, rngTue);
-  addSnoreRally(tue, 9.6, 2, 0.44, rngTue);
+  // 1. Tuesday baseline recording (14s)
+  const tue = makeRoomFloor(14, 101);
+  addRadiatorClank(tue, 1.5, 0.58, 1.0);
+  addDogBarks(tue, 5.2, 0.78, 102, 1.0);
+  addSnoreRally(tue, 8.6, 3.8, 0.62, 103);
+  clampBuffer(tue);
   await fs.writeFile(path.join(SAMPLES_DIR, "tuesday-baseline.wav"), encodeWav(tue, SR));
 
-  // 2. Last Night Main Highlight Tape (26s) — 5 vivid events across the night
-  const rngLast = seededRandom(20261124);
-  const last = new Float32Array(26 * SR);
-  addRoomNoise(last, 0.0042, rngLast);
-  addSnoreRally(last, 1.4, 3, 0.72, rngLast);       // ~01:00 AM Championship Snore Rally
-  addDogBarks(last, 8.2, 0.62, rngLast);            // ~02:10 AM Back-Alley Bark
-  addRadiatorClank(last, 12.1, 0.51, rngLast);      // ~02:51 AM Recurring Tuesday Radiator Clank!
-  addFridgeRaid(last, 16.4, 0.68, rngLast);         // ~03:36 AM Late-Night Fridge Raid
-  addSleepMumble(last, 22.1, 0.22, rngLast);        // ~04:35 AM Ambiguous Sleep Mumble (Jev "You call it")
-  await fs.writeFile(path.join(SAMPLES_DIR, "last-night-highlight.wav"), encodeWav(last, SR));
+  // 2. Last night's compressed highlight tape (26s, 5 realistic distinct events)
+  const lastNight = makeRoomFloor(26, 202);
+  addSnoreRally(lastNight, 1.3, 4.4, 0.76, 203); // 00:59 AM Snore Crescendo (~75 dB)
+  addDogBarks(lastNight, 8.2, 0.84, 204, 1.03); // 02:10 AM Pet Ambush (~77 dB)
+  addRadiatorClank(lastNight, 12.1, 0.64, 1.018); // 02:50 AM Hallway Radiator (~74 dB, ~0.95 match!)
+  addFridgeRaid(lastNight, 16.4, 0.54, 205); // 03:35 AM Fridge Raid (~70 dB)
+  addSleepMumble(lastNight, 22.1, 0.22, 206); // 04:34 AM Ambiguous Mumble (~61 dB, <70% -> You call it!)
+  clampBuffer(lastNight);
+  await fs.writeFile(path.join(SAMPLES_DIR, "last-night-highlight.wav"), encodeWav(lastNight, SR));
 
-  console.log("Generated real acoustic WAV fixtures in", SAMPLES_DIR);
+  console.log("Generated realistic calibrated WAV samples in", SAMPLES_DIR);
 }
 
 main().catch((err) => {

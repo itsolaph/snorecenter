@@ -1,5 +1,6 @@
 /* Hallmark · theme: piste (snow) · seed: snorecenter-morning-sports-highlight-7b71·0e9ee189·2026-11-24·r0 · posture: committed · nav: minimal-topbar · footer: colophon-strip · job: listen */
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · cut: dropped decorative status pills, nested cards, and extra chrome so the live cobalt spectrogram stage and ruled decibel lift board carry the morning report */
+/* Hallmark · dismissed 23 · Piste theme specifies cobalt display figures on snow paper under committed posture */
 
 @font-face {
   font-family: "Barlow Condensed";
@@ -711,8 +712,8 @@ p {
   z-index: 1;
   background-color: var(--color-paper);
   border-bottom: var(--rule-hair) solid var(--color-rule);
-  font-family: var(--font-mono);
-  font-weight: 400;
+  font-family: var(--font-body);
+  font-weight: 500;
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   vertical-align: middle;
@@ -897,6 +898,7 @@ p {
 }
 
 .ruled-item__main {
+  flex: 1 1 16rem;
   display: grid;
   gap: var(--space-2xs);
   min-width: 0;
@@ -1050,6 +1052,10 @@ dialog[open] {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
+}
+
+.footer__inner .caption {
+  max-width: none;
 }
 
 .footer__links {

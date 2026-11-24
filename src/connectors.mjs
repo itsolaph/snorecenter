@@ -36,7 +36,7 @@ const CONNECTOR_CATALOG = [
   { key: "typesafe", name: "TypeSafe AI (Jev)", role: "Calibrated sound classification, drama score & highlight gate", matchers: ["typesafe", "jev"] },
   { key: "pinecone", name: "Pinecone", role: "Recurring overnight sound fingerprint memory (32-dim FFT cosine)", matchers: ["pinecone"] },
   { key: "ollama", name: "Ollama Cloud", role: "Two-anchor morning sports play-by-play script synthesis", matchers: ["ollama"] },
-  { key: "box", name: "Box", role: "Overnight tape inbox (/NightWatch) & Breakfast Box Score archive (/Highlights)", matchers: ["box"] },
+  { key: "box", name: "Box", role: "Inbox (/NightWatch) and Box Score archive (/Highlights)", matchers: ["box"] },
   { key: "elevenlabs", name: "ElevenLabs", role: "Voiced broadcast commentary mix for morning highlight clips", matchers: ["elevenlabs", "eleven"] },
 ];
 
@@ -183,45 +183,46 @@ export async function discoverConnectors(forceRefresh = false) {
 export function localAcousticClassify(event, priorMatch = null) {
   const m = event.metrics;
   const logits = {
-    snore_crescendo: 0.2,
-    pet_ambush: 0.2,
-    appliance_clank: 0.2,
-    fridge_raid: 0.2,
-    mystery_mumble: 0.35,
+    snore_crescendo: 0.25,
+    pet_ambush: 0.25,
+    appliance_clank: 0.25,
+    fridge_raid: 0.25,
+    mystery_mumble: 0.3,
   };
 
-  // Snore crescendo: low-mid centroid, strong low band, rhythmic modulation, sustained duration
-  if (m.centroidHz < 650 && m.lowRatio > 0.35 && m.durationSec >= 1.6) logits.snore_crescendo += 2.8;
-  if (m.modulation >= 0.42 && m.lowRatio >= 0.32) logits.snore_crescendo += 1.4;
-  if (m.splPeakDb >= 78 && m.lowRatio > 0.4) logits.snore_crescendo += 0.9;
+  // Snore crescendo: sustained (>2.4s), strong low band, low-mid centroid, rhythmic breathing modulation
+  if (m.durationSec >= 2.4 && m.lowRatio >= 0.42 && m.centroidHz <= 700) logits.snore_crescendo += 3.1;
+  if (m.modulation >= 0.4 && m.lowRatio >= 0.45 && m.highRatio < 0.2 && m.centroidHz <= 720) logits.snore_crescendo += 1.6;
+  if (m.splPeakDb >= 68 && m.centroidHz < 520 && m.durationSec >= 2.0) logits.snore_crescendo += 1.1;
 
-  // Pet ambush: sharp high-crest impulsive bursts with higher centroid and ZCR
-  if (m.crestFactor >= 4.2 && m.centroidHz >= 600) logits.pet_ambush += 2.6;
-  if (m.midRatio + m.highRatio >= 0.58 && m.zcr >= 0.055) logits.pet_ambush += 1.6;
-  if (m.durationSec <= 2.4 && m.crestFactor >= 3.8) logits.pet_ambush += 0.9;
+  // Pet ambush: sharp impulsive bursts, high centroid (>1300Hz), high crest factor, compact duration
+  if (m.centroidHz >= 1200 && m.crestFactor >= 3.2 && m.durationSec <= 2.2 && m.splPeakDb >= 68) logits.pet_ambush += 3.1;
+  if (m.highRatio >= 0.22 && m.zcr >= 0.08 && m.splPeakDb >= 68) logits.pet_ambush += 1.8;
 
-  // Appliance / radiator clank: sharp tonal transient or narrow metallic decay
-  if (m.crestFactor >= 3.4 && m.centroidHz >= 320 && m.centroidHz <= 950 && m.durationSec <= 1.7) {
-    logits.appliance_clank += 2.4;
+  // Appliance / radiator clank: metallic resonant decay, mid-band concentration, compact duration (<=1.9s)
+  if (m.centroidHz >= 400 && m.centroidHz <= 1350 && m.durationSec <= 1.9 && m.splPeakDb >= 64) {
+    logits.appliance_clank += 2.6;
   }
-  if (m.spectralFlux >= 0.015 && m.midRatio >= 0.28 && m.durationSec <= 1.9) {
-    logits.appliance_clank += 1.2;
-  }
-  if (priorMatch && priorMatch.label === "appliance_clank" && priorMatch.score >= 0.88) {
-    logits.appliance_clank += 1.8;
+  if (m.midRatio >= 0.34 && m.crestFactor >= 2.6 && m.durationSec <= 1.8 && m.splPeakDb >= 66) {
+    logits.appliance_clank += 1.5;
   }
 
-  // Fridge raid: longer multi-phase broadband sound (footsteps + door rattle + low hum)
-  if (m.durationSec >= 2.0 && m.highRatio >= 0.16 && m.lowRatio >= 0.26) logits.fridge_raid += 2.5;
-  if (m.zcr >= 0.035 && m.zcr <= 0.12 && m.modulation >= 0.35 && m.centroidHz >= 450 && m.centroidHz <= 1400) {
-    logits.fridge_raid += 1.3;
+  // Fridge raid: multi-phase broadband sound (footsteps + bright latch clicks + low compressor hum)
+  if (m.durationSec >= 2.0 && m.highRatio >= 0.2 && m.lowRatio >= 0.24 && m.splPeakDb >= 66) logits.fridge_raid += 2.9;
+  if (m.zcr >= 0.05 && m.crestFactor >= 3.8 && m.durationSec >= 2.0 && m.splPeakDb >= 66) logits.fridge_raid += 1.8;
+
+  // Mystery mumble: quieter (<66.5 dB), softer crest, blended mid-low formant -> intentionally tight split (<70%)
+  if (m.splPeakDb < 66.5 && m.durationSec <= 2.3) {
+    logits.mystery_mumble += 1.95;
+    logits.fridge_raid += 1.2;
+    logits.snore_crescendo += 0.9;
+    logits.appliance_clank -= 0.4;
+    logits.pet_ambush -= 0.6;
   }
 
-  // Mystery mumble: quieter, mid-band formant, low crest, moderate/short duration -> intentionally tight probabilities
-  if (m.splPeakDb <= 77 && m.crestFactor < 4.5 && m.centroidHz >= 350 && m.centroidHz <= 1250) {
-    logits.mystery_mumble += 1.75;
-    logits.fridge_raid += 0.95;
-    logits.snore_crescendo += 0.7;
+  // Prior vector memory reinforcement (for confident recurring room culprits)
+  if (priorMatch && priorMatch.score >= 0.9 && logits[priorMatch.label] !== undefined && m.splPeakDb >= 66) {
+    logits[priorMatch.label] += 1.4;
   }
 
   // Softmax calibration
@@ -245,9 +246,9 @@ export function localAcousticClassify(event, priorMatch = null) {
     }
   }
 
-  const energyFactor = Math.max(0, Math.min(1, (m.splPeakDb - 58) / 34));
+  const energyFactor = Math.max(0, Math.min(1, (m.splPeakDb - 50) / 30));
   const durFactor = Math.max(0, Math.min(1, m.durationSec / 4.5));
-  const dramaScore = Number(Math.max(0.18, Math.min(0.98, 0.28 + 0.52 * energyFactor + 0.2 * durFactor)).toFixed(2));
+  const dramaScore = Number(Math.max(0.22, Math.min(0.98, 0.28 + 0.52 * energyFactor + 0.2 * durFactor)).toFixed(2));
   const highlightWorthy = dramaScore >= 0.55 || bestProb < 0.7;
 
   return {

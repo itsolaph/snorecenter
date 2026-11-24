@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" role="img" aria-label="SnoreCenter: Overnight room audio turned into a morning sports highlight show on a Fly.io Sprite">
+  <rect width="1200" height="320" fill="#f9fafd"/>
+  <rect x="0" y="0" width="1200" height="8" fill="#1d2028"/>
+  <rect x="0" y="312" width="1200" height="8" fill="#2448e5"/>
+  <rect x="64" y="64" width="600" height="2" fill="#1d2028"/>
+  <text x="64" y="148" fill="#1d2028" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="78" letter-spacing="-1">SNORECENTER</text>
+  <text x="64" y="196" fill="#414756" font-family="system-ui, -apple-system, sans-serif" font-weight="500" font-size="24">Overnight room audio, called like a morning sports highlight show.</text>
+  <text x="64" y="242" fill="#2448e5" font-family="ui-monospace, monospace" font-size="16">Fly.io Sprite  |  TypeSafe AI Jev  |  Pinecone  |  Ollama Cloud  |  Box  |  ElevenLabs</text>
+  <g transform="translate(760, 72)">
+    <rect x="0" y="0" width="376" height="176" fill="#161923"/>
+    <rect x="24" y="96" width="14" height="56" fill="#2448e5"/>
+    <rect x="46" y="70" width="14" height="82" fill="#3a60ff"/>
+    <rect x="68" y="42" width="14" height="110" fill="#f9fafd"/>
+    <rect x="90" y="80" width="14" height="72" fill="#3a60ff"/>
+    <rect x="112" y="114" width="14" height="38" fill="#2448e5"/>
+    <rect x="148" y="54" width="14" height="98" fill="#f9fafd"/>
+    <rect x="170" y="34" width="14" height="118" fill="#3a60ff"/>
+    <rect x="192" y="90" width="14" height="62" fill="#2448e5"/>
+    <rect x="228" y="64" width="14" height="88" fill="#3a60ff"/>
+    <rect x="250" y="48" width="14" height="104" fill="#f9fafd"/>
+    <rect x="272" y="102" width="14" height="50" fill="#2448e5"/>
+    <rect x="308" y="84" width="14" height="68" fill="#e85c36"/>
+    <rect x="330" y="62" width="14" height="90" fill="#e85c36"/>
+    <line x1="0" y1="154" x2="376" y2="154" stroke="#f9fafd" stroke-width="2"/>
+  </g>
+</svg>

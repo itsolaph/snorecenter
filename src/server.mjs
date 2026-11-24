@@ -392,6 +392,10 @@ export async function createAppServer(options = {}) {
 
       // Static frontend files
       if (method === "GET") {
+        if (pathname === "/favicon.ico") {
+          const icoSvg = path.join(PUBLIC_DIR, "favicon.svg");
+          if (fs.existsSync(icoSvg)) return await serveFileWithRange(req, res, icoSvg);
+        }
         const rel = pathname === "/" ? "index.html" : pathname;
         const filePath = safeResolve(PUBLIC_DIR, rel);
         if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {

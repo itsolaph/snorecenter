@@ -327,7 +327,7 @@ export function analyzeRecording(parsed, options = {}) {
     waveform[i] = Number(maxA.toFixed(4));
   }
 
-  const spectrogram = computeSpectrogram(samples, sampleRate, 180, 32);
+  const spectrogram = computeSpectrogram(samples, sampleRate, 240, 40);
 
   // Compute Box Score stats (strictly non-medical entertainment metrics)
   let loudestEvent = events[0];
@@ -346,7 +346,7 @@ export function analyzeRecording(parsed, options = {}) {
     }
   }
 
-  const ambientSplDb = Number(Math.max(28, Math.min(72, 96 + noiseFloorDb)).toFixed(1));
+  const ambientSplDb = Number(Math.max(29, Math.min(62, 78 + noiseFloorDb)).toFixed(1));
 
   return {
     sampleRate,

@@ -240,8 +240,8 @@ export function extractAcousticSignature(samples, sampleRate) {
     metrics: {
       rmsDb: Number((20 * Math.log10(rms + 1e-7)).toFixed(1)),
       peakDb: Number((20 * Math.log10(peakAmp + 1e-7)).toFixed(1)),
-      splPeakDb: Number(Math.max(32, Math.min(98, 96 + 20 * Math.log10(peakAmp + 1e-7))).toFixed(1)),
-      splAvgDb: Number(Math.max(30, Math.min(94, 96 + 20 * Math.log10(rms + 1e-7))).toFixed(1)),
+      splPeakDb: Number(Math.max(32, Math.min(89, 78 + 20 * Math.log10(peakAmp + 1e-7))).toFixed(1)),
+      splAvgDb: Number(Math.max(30, Math.min(85, 78 + 20 * Math.log10(rms + 1e-7))).toFixed(1)),
       centroidHz: Math.round(centroidHz),
       zcr: Number(zcr.toFixed(4)),
       crestFactor: Number(crest.toFixed(2)),

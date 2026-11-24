@@ -142,6 +142,13 @@ function drawSpectrogram(session, currentTimeSec = 0) {
     ctx.fillText(tag, labelX, 20);
   }
 
+  // Subtle frequency scale ruler along right edge
+  ctx.font = '400 11px "JetBrains Mono", monospace';
+  ctx.fillStyle = "rgba(247, 249, 255, 0.65)";
+  ctx.fillText("6 kHz", w - 46, 18);
+  ctx.fillText("1 kHz", w - 46, Math.round(h * 0.5));
+  ctx.fillText("80 Hz", w - 46, h - 10);
+
   // Live playhead cursor
   const px = Math.min(w - 2, Math.max(0, (currentTimeSec / dur) * w));
   ctx.fillStyle = "#f7f9ff";
